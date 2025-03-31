@@ -4,12 +4,19 @@ import React from 'react';
 import Link from 'next/link';
 
 export default function Home() {
-  // HubSpot OAuth URL construction
-  const hubspotClientId = process.env.NEXT_PUBLIC_HUBSPOT_CLIENT_ID;
-  const hubspotRedirectUri = process.env.NEXT_PUBLIC_HUBSPOT_REDIRECT_URI;
+  // HubSpot OAuth URL construction with fallback values
+  const hubspotClientId = process.env.NEXT_PUBLIC_HUBSPOT_CLIENT_ID || '63e23121-89be-48fa-9e1b-7c68d7e1f83b';
+  const hubspotRedirectUri = process.env.NEXT_PUBLIC_HUBSPOT_REDIRECT_URI || 'https://hubspot-sfmc-migrator.vercel.app/api/auth/hubspot';
+  
+  // For debugging - log variables to console
+  console.log('Client ID:', hubspotClientId);
+  console.log('Redirect URI:', hubspotRedirectUri);
   
   // Create the OAuth authorization URL with all required scopes
-  const hubspotAuthUrl = `https://app-na2.hubspot.com/oauth/authorize?client_id=${hubspotClientId}&redirect_uri=${encodeURIComponent(hubspotRedirectUri || '')}&scope=content%20automation%20oauth%20forms%20files%20crm.objects.contacts.write%20crm.objects.companies.read%20crm.lists.read%20crm.objects.deals.read%20crm.schemas.contacts.read%20crm.objects.contacts.read`;
+  const hubspotAuthUrl = `https://app.hubspot.com/oauth/authorize?client_id=${hubspotClientId}&redirect_uri=${encodeURIComponent(hubspotRedirectUri)}&scope=content%20automation%20oauth%20forms%20files%20crm.objects.contacts.write%20crm.objects.companies.read%20crm.lists.read%20crm.objects.deals.read%20crm.schemas.contacts.read%20crm.objects.contacts.read`;
+  
+  // For debugging
+  console.log('Full Auth URL:', hubspotAuthUrl);
   
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-6 lg:p-24 bg-gradient-to-b from-blue-50 to-white">
