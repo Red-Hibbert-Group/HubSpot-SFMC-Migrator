@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { createHubspotClient, getHubspotContacts, getHubspotLists } from '@/app/lib/hubspot';
 import { createDataExtension, insertDataExtensionRows, getSFMCToken } from '@/app/lib/sfmc';

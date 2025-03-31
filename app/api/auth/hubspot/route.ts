@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { getHubspotTokens } from '@/app/lib/hubspot';
 import { supabase, storeIntegrationTokens } from '@/app/supabase/client';

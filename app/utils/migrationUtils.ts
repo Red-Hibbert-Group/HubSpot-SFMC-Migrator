@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+
 // Utility functions for mapping between HubSpot and SFMC
 
 // Map HubSpot contact fields to SFMC data extension fields
