@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
@@ -13,7 +13,20 @@ type IntegrationStatus = 'loading' | 'connected' | 'disconnected' | 'error';
 type MigrationStatus = 'idle' | 'loading' | 'success' | 'error';
 type MigrationResult = Record<string, any>;
 
-export default function Dashboard() {
+// Dashboard loader component
+function DashboardLoader() {
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading dashboard...</p>
+      </div>
+    </div>
+  );
+}
+
+// Dashboard content component that uses useSearchParams
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const userId = searchParams.get('userId');
@@ -478,5 +491,14 @@ export default function Dashboard() {
         </div>
       )}
     </main>
+  );
+}
+
+// Main Dashboard component with Suspense
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<DashboardLoader />}>
+      <DashboardContent />
+    </Suspense>
   );
 } 
