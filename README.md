@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # HubSpot to SFMC Migration Tool
 
 A web application that helps marketing teams migrate their data from HubSpot to Salesforce Marketing Cloud (SFMC). Built with Next.js, Supabase, and Tailwind CSS.
@@ -131,3 +132,6 @@ This project is licensed under the MIT License.
 - Next.js Framework
 - Supabase for authentication and database
 - Tailwind CSS for styling
+=======
+# HubSpot-SFMC-Migrator
+>>>>>>> origin/main
