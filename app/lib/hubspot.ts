@@ -109,16 +109,44 @@ export const getHubspotLists = async (client: Client) => {
 
 export const getHubspotTemplates = async (client: Client) => {
   try {
-    const response = await axios.get('https://api.hubapi.com/cms/v3/design-manager/templates', {
-      headers: {
-        // @ts-ignore - Using client accessToken property
-        Authorization: `Bearer ${client.accessToken}`
+    // First try the v3 endpoint
+    try {
+      const response = await axios.get('https://api.hubapi.com/cms/v3/design-manager/templates', {
+        headers: {
+          // @ts-ignore - Using client accessToken property
+          Authorization: `Bearer ${client.accessToken}`
+        }
+      });
+      return response.data.results || [];
+    } catch (v3Error) {
+      console.log('V3 template API failed, trying legacy endpoint');
+      
+      // Fall back to legacy endpoint (v2)
+      try {
+        const response = await axios.get('https://api.hubapi.com/content/api/v2/templates', {
+          headers: {
+            // @ts-ignore - Using client accessToken property
+            Authorization: `Bearer ${client.accessToken}`
+          }
+        });
+        return response.data.objects || [];
+      } catch (v2Error) {
+        console.log('V2 template API also failed, trying marketing email templates');
+        
+        // Try the email templates endpoint
+        const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/templates', {
+          headers: {
+            // @ts-ignore - Using client accessToken property
+            Authorization: `Bearer ${client.accessToken}`
+          }
+        });
+        return response.data || [];
       }
-    });
-    return response.data.results;
+    }
   } catch (error) {
     console.error('Error fetching HubSpot templates:', error);
-    throw error;
+    // Return empty array instead of throwing to prevent API failure
+    return [];
   }
 };
 

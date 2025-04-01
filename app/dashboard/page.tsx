@@ -3,7 +3,7 @@
 
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
@@ -56,6 +56,13 @@ function DashboardContent() {
 
   // State for migration results
   const [migrationResults, setMigrationResults] = useState<Record<string, MigrationResult>>({});
+
+  // Define state for custom template data
+  const [customTemplate, setCustomTemplate] = useState({
+    name: '',
+    content: ''
+  });
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   // Check if we have userId
   useEffect(() => {
@@ -115,6 +122,74 @@ function DashboardContent() {
     } catch (error) {
       console.error('Error connecting to SFMC:', error);
       setSfmcStatus('error');
+    }
+  };
+
+  // Handle template input change
+  const handleTemplateInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setCustomTemplate(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Upload custom template
+  const uploadCustomTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!customTemplate.name || !customTemplate.content) {
+      alert('Template name and content are required');
+      return;
+    }
+    
+    try {
+      setMigrationStatus(prev => ({
+        ...prev,
+        templates: 'loading'
+      }));
+      
+      // Call migration API with customTemplates array
+      const response = await axios.post(`/api/migrate/templates`, {
+        userId,
+        hubspotToken,
+        sfmcCredentials,
+        customTemplates: [
+          {
+            id: `custom-${Date.now()}`,
+            name: customTemplate.name,
+            content: customTemplate.content
+          }
+        ]
+      });
+      
+      // Update migration status and results
+      setMigrationStatus(prev => ({
+        ...prev,
+        templates: 'success'
+      }));
+      
+      setMigrationResults(prev => ({
+        ...prev,
+        templates: response.data
+      }));
+      
+      // Reset form and close modal
+      setCustomTemplate({ name: '', content: '' });
+      setShowTemplateModal(false);
+      
+    } catch (error) {
+      console.error('Error uploading custom template:', error);
+      
+      setMigrationStatus(prev => ({
+        ...prev,
+        templates: 'error'
+      }));
+      
+      setMigrationResults(prev => ({
+        ...prev,
+        templates: { error: 'Template upload failed' }
+      }));
     }
   };
 
@@ -358,10 +433,23 @@ function DashboardContent() {
             <div className="border-b border-gray-200 pb-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium">Email Templates</h3>
-                {renderMigrationButton('templates')}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowTemplateModal(true)}
+                    disabled={!(hubspotStatus === 'connected' && sfmcStatus === 'connected')}
+                    className={`px-4 py-2 rounded-md text-white ${
+                      (hubspotStatus === 'connected' && sfmcStatus === 'connected') 
+                        ? 'bg-green-600 hover:bg-green-500' 
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Upload Custom Template
+                  </button>
+                  {renderMigrationButton('templates')}
+                </div>
               </div>
               <p className="text-gray-600 mb-2">
-                Convert HubSpot email templates to SFMC Content Builder templates.
+                Convert HubSpot email templates to SFMC Content Builder templates or upload your own custom templates.
               </p>
               {renderMigrationResults('templates')}
             </div>
@@ -484,6 +572,64 @@ function DashboardContent() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
                 >
                   Connect
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Template Upload Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl">
+            <h3 className="text-lg font-semibold mb-4">Upload Custom SFMC Template</h3>
+            <form onSubmit={uploadCustomTemplate}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Template Name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={customTemplate.name}
+                    onChange={handleTemplateInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Enter template name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Template HTML Content
+                  </label>
+                  <textarea
+                    name="content"
+                    value={customTemplate.content}
+                    onChange={handleTemplateInputChange}
+                    className="w-full h-96 px-3 py-2 border border-gray-300 rounded-md font-mono text-sm"
+                    placeholder="Paste your HTML template content here"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Include <code className="bg-gray-100 px-1 rounded">data-type="slot" data-key="slotName"</code> attributes for editable regions.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-500"
+                >
+                  Upload Template
                 </button>
               </div>
             </form>
