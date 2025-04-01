@@ -127,76 +127,152 @@ export async function POST(request: Request) {
     const fields = mapContactFields(properties);
 
     // Create data extension in SFMC
-    const dataExtensionResponse = await createDataExtension(
-      {
-        ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
-        accessToken: sfmcAccessToken,
-      },
-      'HubSpot_Contacts',
-      fields
-    );
+    try {
+      const dataExtensionResponse = await createDataExtension(
+        {
+          ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+          accessToken: sfmcAccessToken,
+        },
+        'HubSpot_Contacts',
+        fields
+      );
 
-    // Map contact data to SFMC format
-    const sfmcContactData = mapContactData(contacts);
+      // Map contact data to SFMC format
+      const sfmcContactData = mapContactData(contacts);
 
-    // Insert contacts into data extension
-    const insertResponse = await insertDataExtensionRows(
-      {
-        ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
-        accessToken: sfmcAccessToken,
-      },
-      dataExtensionResponse.customerKey || dataExtensionResponse.key,
-      sfmcContactData
-    );
+      // Insert contacts into data extension
+      const insertResponse = await insertDataExtensionRows(
+        {
+          ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+          accessToken: sfmcAccessToken,
+        },
+        dataExtensionResponse.customerKey || dataExtensionResponse.key,
+        sfmcContactData
+      );
 
-    // Create data extensions for lists if included
-    let listMigrationResults: any[] = [];
-    if (body.includeLists && lists.length > 0) {
-      listMigrationResults = await Promise.all(
-        lists.map(async (list: any) => {
-          // Create a data extension for each list
-          const listDEResponse = await createDataExtension(
+      // Create data extensions for lists if included
+      let listMigrationResults: any[] = [];
+      if (body.includeLists && lists.length > 0) {
+        listMigrationResults = await Promise.all(
+          lists.map(async (list: any) => {
+            try {
+              // Create a data extension for each list
+              const listDEResponse = await createDataExtension(
+                {
+                  ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+                  accessToken: sfmcAccessToken,
+                },
+                `HubSpot_List_${list.name.replace(/\s+/g, '_')}`,
+                [
+                  {
+                    name: 'EmailAddress',
+                    fieldType: 'EmailAddress',
+                    isRequired: true,
+                    isPrimaryKey: true
+                  },
+                  {
+                    name: 'DateAdded',
+                    fieldType: 'Date',
+                    isRequired: false
+                  }
+                ]
+              );
+
+              // Return list migration info
+              return {
+                listId: list.listId,
+                listName: list.name,
+                dataExtensionKey: listDEResponse.customerKey || listDEResponse.key,
+                status: 'created'
+              };
+            } catch (error) {
+              console.error(`Error creating data extension for list ${list.name}:`, error);
+              return {
+                listId: list.listId,
+                listName: list.name,
+                status: 'error',
+                error: error instanceof Error ? error.message : String(error)
+              };
+            }
+          })
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully migrated ${contacts.length} contacts`,
+        dataExtension: {
+          name: dataExtensionResponse.name || 'HubSpot_Contacts',
+          key: dataExtensionResponse.customerKey || dataExtensionResponse.key
+        },
+        migrated: contacts.length,
+        lists: listMigrationResults
+      });
+    } catch (error) {
+      console.error('Error in data extension creation or contacts insertion:', error);
+      
+      // Check if it's the "already exists" error that we can recover from
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('already exists')) {
+        // If the data extension already exists, try to find it and use it
+        console.log('Attempting to use existing data extension...');
+        
+        try {
+          // For now, we'll generate a unique name to ensure we can still proceed
+          const uniqueSuffix = Date.now().toString();
+          const uniqueName = `HubSpot_Contacts_${uniqueSuffix}`;
+          
+          // Create a new data extension with a unique name
+          const dataExtensionResponse = await createDataExtension(
             {
               ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
               accessToken: sfmcAccessToken,
             },
-            `HubSpot_List_${list.name.replace(/\s+/g, '_')}`,
-            [
-              {
-                name: 'EmailAddress',
-                fieldType: 'EmailAddress',
-                isRequired: true,
-                isPrimaryKey: true
-              },
-              {
-                name: 'DateAdded',
-                fieldType: 'Date',
-                isRequired: false
-              }
-            ]
+            uniqueName,
+            fields
           );
-
-          // Return list migration info
-          return {
-            listId: list.listId,
-            listName: list.name,
-            dataExtensionKey: listDEResponse.customerKey || listDEResponse.key,
-            status: 'created'
-          };
-        })
+          
+          // Map contact data to SFMC format
+          const sfmcContactData = mapContactData(contacts);
+          
+          // Insert contacts into the new data extension
+          const insertResponse = await insertDataExtensionRows(
+            {
+              ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+              accessToken: sfmcAccessToken,
+            },
+            dataExtensionResponse.customerKey || dataExtensionResponse.key,
+            sfmcContactData
+          );
+          
+          return NextResponse.json({
+            success: true,
+            message: `Successfully migrated ${contacts.length} contacts to new data extension`,
+            dataExtension: {
+              name: uniqueName,
+              key: dataExtensionResponse.customerKey || dataExtensionResponse.key
+            },
+            migrated: contacts.length,
+            note: "Created a unique data extension because one with the default name already exists"
+          });
+        } catch (fallbackError) {
+          console.error('Error in fallback data extension creation:', fallbackError);
+          return NextResponse.json(
+            { 
+              error: 'Failed to migrate contacts even with fallback approach',
+              details: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            },
+            { status: 500 }
+          );
+        }
+      }
+      
+      // For other types of errors, return the error response
+      return NextResponse.json(
+        { error: 'Failed to migrate contacts', details: errorMessage },
+        { status: 500 }
       );
     }
-
-    return NextResponse.json({
-      success: true,
-      message: `Successfully migrated ${contacts.length} contacts`,
-      dataExtension: {
-        name: 'HubSpot_Contacts',
-        key: dataExtensionResponse.customerKey || dataExtensionResponse.key
-      },
-      migrated: contacts.length,
-      lists: listMigrationResults
-    });
   } catch (error) {
     console.error('Error in contacts migration:', error);
     return NextResponse.json(

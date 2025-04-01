@@ -60,9 +60,19 @@ function DashboardContent() {
   // Define state for custom template data
   const [customTemplate, setCustomTemplate] = useState({
     name: '',
-    content: ''
+    content: '',
+    folderId: ''
   });
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+
+  // State for folder ID modal
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [folderIdInput, setFolderIdInput] = useState('');
+  const [migrationModule, setMigrationModule] = useState('');
+
+  // State for SFMC folders
+  const [folders, setFolders] = useState<Array<any>>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
 
   // Check if we have userId
   useEffect(() => {
@@ -149,8 +159,8 @@ function DashboardContent() {
         templates: 'loading'
       }));
       
-      // Call migration API with customTemplates array
-      const response = await axios.post(`/api/migrate/templates`, {
+      // Prepare API request data
+      const requestData: any = {
         userId,
         hubspotToken,
         sfmcCredentials,
@@ -161,7 +171,15 @@ function DashboardContent() {
             content: customTemplate.content
           }
         ]
-      });
+      };
+      
+      // Add folderId if provided
+      if (customTemplate.folderId && customTemplate.folderId.trim()) {
+        requestData.folderId = parseInt(customTemplate.folderId.trim(), 10);
+      }
+      
+      // Call migration API with customTemplates array
+      const response = await axios.post(`/api/migrate/templates`, requestData);
       
       // Update migration status and results
       setMigrationStatus(prev => ({
@@ -175,7 +193,7 @@ function DashboardContent() {
       }));
       
       // Reset form and close modal
-      setCustomTemplate({ name: '', content: '' });
+      setCustomTemplate({ name: '', content: '', folderId: '' });
       setShowTemplateModal(false);
       
     } catch (error) {
@@ -200,19 +218,34 @@ function DashboardContent() {
       return;
     }
     
+    // For templates module, prompt for folder ID if it's a new migration
+    if (module === 'templates' && migrationStatus[module] === 'idle') {
+      setMigrationModule(module);
+      setShowFolderModal(true);
+      return;
+    }
+    
     try {
       setMigrationStatus(prev => ({
         ...prev,
         [module]: 'loading'
       }));
 
-      // Call migration API with userId, hubspotToken, and SFMC credentials
-      const response = await axios.post(`/api/migrate/${module}`, {
+      // Build request data
+      const requestData: any = {
         userId,
         hubspotToken,
-        sfmcCredentials,  // Pass SFMC credentials directly
-        limit: 100 // You can adjust this or make it configurable
-      });
+        sfmcCredentials,
+        limit: 100
+      };
+      
+      // Add folder ID for templates if provided
+      if (module === 'templates' && folderIdInput.trim()) {
+        requestData.folderId = parseInt(folderIdInput.trim(), 10);
+      }
+
+      // Call migration API
+      const response = await axios.post(`/api/migrate/${module}`, requestData);
 
       // Update migration status and results
       setMigrationStatus(prev => ({
@@ -237,6 +270,15 @@ function DashboardContent() {
         [module]: { error: 'Migration failed' }
       }));
     }
+  };
+
+  // Handle folder ID submission
+  const handleFolderIdSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowFolderModal(false);
+    
+    // Start migration with folder ID
+    startMigration(migrationModule);
   };
 
   // Render connection status badge
@@ -328,6 +370,31 @@ function DashboardContent() {
         )}
       </div>
     );
+  };
+
+  // Get SFMC folders
+  const getSFMCFolders = async () => {
+    if (!sfmcCredentials.clientId || !sfmcCredentials.clientSecret || !sfmcCredentials.subdomain) {
+      alert('SFMC credentials are required');
+      return;
+    }
+    
+    setLoadingFolders(true);
+    
+    try {
+      const response = await axios.post('/api/sfmc/folders', {
+        sfmcCredentials
+      });
+      
+      if (response.data && response.data.items) {
+        setFolders(response.data.items);
+      }
+    } catch (error) {
+      console.error('Error fetching SFMC folders:', error);
+      alert('Failed to fetch SFMC folders');
+    } finally {
+      setLoadingFolders(false);
+    }
   };
 
   // If no userId, show a message
@@ -616,6 +683,19 @@ function DashboardContent() {
                     Include <code className="bg-gray-100 px-1 rounded">data-type="slot" data-key="slotName"</code> attributes for editable regions.
                   </p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Folder ID
+                  </label>
+                  <input
+                    type="text"
+                    name="folderId"
+                    value={customTemplate.folderId}
+                    onChange={handleTemplateInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Enter folder ID"
+                  />
+                </div>
               </div>
               <div className="mt-6 flex justify-end space-x-3">
                 <button
@@ -630,6 +710,101 @@ function DashboardContent() {
                   className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-500"
                 >
                   Upload Template
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Folder ID Modal */}
+      {showFolderModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Enter Folder ID</h3>
+            <form onSubmit={handleFolderIdSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Folder ID
+                  </label>
+                  <input
+                    type="text"
+                    name="folderId"
+                    value={folderIdInput}
+                    onChange={(e) => setFolderIdInput(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Enter folder ID"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Leave empty to automatically create a "HubSpot Templates" folder
+                  </p>
+                </div>
+                
+                <div>
+                  <div className="flex justify-between items-center">
+                    <label className="block text-sm font-medium text-gray-700">
+                      SFMC Folders
+                    </label>
+                    <button
+                      type="button"
+                      onClick={getSFMCFolders}
+                      disabled={loadingFolders}
+                      className="text-sm text-blue-600 hover:text-blue-500"
+                    >
+                      {loadingFolders ? 'Loading...' : 'Refresh Folders'}
+                    </button>
+                  </div>
+                  
+                  {folders.length > 0 ? (
+                    <div className="mt-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {folders.map((folder) => (
+                            <tr key={folder.id}>
+                              <td className="px-3 py-2 text-xs text-gray-500">{folder.name}</td>
+                              <td className="px-3 py-2 text-xs text-gray-500">{folder.id}</td>
+                              <td className="px-3 py-2 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => setFolderIdInput(folder.id.toString())}
+                                  className="text-blue-600 hover:text-blue-500"
+                                >
+                                  Select
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {loadingFolders ? 'Loading folders...' : 'Click "Refresh Folders" to view available folders'}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowFolderModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                >
+                  Start Migration
                 </button>
               </div>
             </form>

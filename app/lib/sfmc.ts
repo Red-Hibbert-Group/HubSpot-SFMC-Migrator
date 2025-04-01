@@ -595,4 +595,64 @@ export const createJourney = async (
     console.error('Error creating SFMC Journey:', error);
     throw error;
   }
+};
+
+// Get SFMC folders
+export const getSFMCFolders = async (
+  auth: SFMCAuth & { accessToken: string }
+) => {
+  try {
+    const response = await axios.get(
+      `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/categories`,
+      {
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    console.log('SFMC folders:', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error: any) {
+    console.error('Error getting SFMC folders:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
+  }
+};
+
+// Create a folder in SFMC Content Builder
+export const createSFMCFolder = async (
+  auth: SFMCAuth & { accessToken: string },
+  name: string,
+  parentId: number = 0
+) => {
+  try {
+    const response = await axios.post(
+      `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/categories`,
+      {
+        name,
+        parentId
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    console.log('SFMC folder created:', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error: any) {
+    console.error('Error creating SFMC folder:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
+  }
 }; 

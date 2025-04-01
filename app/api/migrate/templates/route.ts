@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import { createHubspotClient, getHubspotTemplates } from '@/app/lib/hubspot';
-import { createEmailTemplate, getSFMCToken } from '@/app/lib/sfmc';
+import { createEmailTemplate, getSFMCToken, getSFMCFolders, createSFMCFolder } from '@/app/lib/sfmc';
 import { getIntegrationTokens } from '@/app/supabase/client';
 import { convertHubspotTemplate } from '@/app/utils/migrationUtils';
 import axios from 'axios';
@@ -93,12 +93,65 @@ export async function POST(request: Request) {
       }
     }
 
+    // Get or create a folder in SFMC Content Builder
+    let contentBuilderFolderId;
+    
+    // If folderId is provided, use it
+    if (folderId) {
+      contentBuilderFolderId = folderId;
+      console.log(`Using provided folder ID: ${contentBuilderFolderId}`);
+    } else {
+      try {
+        // Get folders from SFMC
+        const foldersResponse = await getSFMCFolders({
+          ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+          accessToken: sfmcAccessToken,
+        });
+        
+        // Find root content builder folder
+        const contentBuilderFolder = foldersResponse.items.find((folder: any) => 
+          folder.name === 'Content Builder'
+        );
+        
+        if (!contentBuilderFolder) {
+          throw new Error('Content Builder folder not found');
+        }
+        
+        // Find or create a "HubSpot Templates" folder
+        const hubspotFolder = foldersResponse.items.find((folder: any) => 
+          folder.name === 'HubSpot Templates' && 
+          folder.parentId === contentBuilderFolder.id
+        );
+        
+        if (hubspotFolder) {
+          contentBuilderFolderId = hubspotFolder.id;
+          console.log(`Found existing HubSpot Templates folder with ID: ${contentBuilderFolderId}`);
+        } else {
+          // Create a new folder
+          const newFolder = await createSFMCFolder(
+            {
+              ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+              accessToken: sfmcAccessToken,
+            },
+            'HubSpot Templates',
+            contentBuilderFolder.id
+          );
+          
+          contentBuilderFolderId = newFolder.id;
+          console.log(`Created new HubSpot Templates folder with ID: ${contentBuilderFolderId}`);
+        }
+      } catch (error) {
+        console.error('Error finding/creating SFMC folder:', error);
+        return NextResponse.json(
+          { error: 'Failed to find or create a folder in SFMC. Please provide a valid folderId.' },
+          { status: 400 }
+        );
+      }
+    }
+
     // If customTemplates are provided, use those directly and skip HubSpot API
     if (customTemplates && Array.isArray(customTemplates) && customTemplates.length > 0) {
       console.log(`Using ${customTemplates.length} custom templates provided by user`);
-      
-      // SFMC default folder ID for Content Builder, use provided or default
-      const contentBuilderFolderId = folderId || 12345; 
       
       // Migration results
       const results = [];
@@ -166,269 +219,49 @@ export async function POST(request: Request) {
     const hubspotClient = createHubspotClient(hubspotAccessToken);
     
     // Fetch HubSpot templates
-    console.log('Fetching HubSpot templates...');
-    let hubspotTemplates;
+    console.log('Fetching HubSpot templates directly from API...');
+    let hubspotTemplates = [];
+    
     try {
-      hubspotTemplates = await getHubspotTemplates(hubspotClient);
-      console.log(`Got ${hubspotTemplates.length} templates from HubSpot API`);
-    } catch (error) {
-      console.warn('Failed to get templates from HubSpot API, using fallback template');
-      hubspotTemplates = [];
+      // Directly call the API instead of using our helper to bypass potential issues
+      const response = await axios.get('https://api.hubapi.com/cms/v3/design-manager/templates', {
+        params: {
+          limit: 100
+        },
+        headers: {
+          'Authorization': `Bearer ${hubspotAccessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      hubspotTemplates = response.data.results || [];
+      console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot API`);
+    } catch (error: any) {
+      console.error('Error fetching templates directly from HubSpot:', error);
+      
+      // Get details about the error
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      
+      return NextResponse.json(
+        { 
+          error: 'Failed to fetch templates from HubSpot API. Please check your token and permissions.',
+          details: error.response?.data || error.message
+        },
+        { status: 500 }
+      );
     }
     
-    // Add a fallback template if no templates are available from API
-    if (!hubspotTemplates || hubspotTemplates.length === 0) {
-      console.log('Using fallback sample template since no templates were found in the API');
-      
-      // Use the template content provided in your example
-      const sampleTemplateContent = `<!DOCTYPE html>
-<html>
-
-<head>
-    <style type="text/css">
-        div,
-        p,
-        a,
-        li,
-        td {
-            -webkit-text-size-adjust: none;
-        }
-        
-        body {
-            margin: 0;
-            padding: 0;
-        }
-        
-        td[class="headercell-phone"] {
-            display: none;
-        }
-        
-        @media screen and (max-width: 480px) {
-            table[class="tmp--container"] {
-                width: 360px !important;
-            }
-            table[class="tmp--container-padding"] {
-                width: 360px !important;
-                padding: 20px !important;
-            }
-            table[class="tmp--container-padding-top"] {
-                width: 360px !important;
-                padding: 20px 0 0 0 !important;
-            }
-            table[class="tmp--container-padding-bottom"] {
-                width: 360px !important;
-                padding: 0 0 20px 0 !important;
-            }
-            table[class="hero"] {
-                width: 100% !important;
-            }
-            table[class="tmp--full-width"] {
-                width: 100% !important;
-                float: left !important;
-                padding: 0 !important;
-            }
-            td[class="tmp--full-width"] {
-                width: 100% !important;
-                float: left !important;
-                padding: 0 !important;
-            }
-            td[class="tmp--full-width-padding-bottom"] {
-                width: 100% !important;
-                float: left !important;
-                padding: 0 0 25px 0 !important;
-            }
-            td[class="tmp--full-width-center"] {
-                width: 100% !important;
-                float: left !important;
-                padding: 10px 0 10px 0 !important;
-                text-align: center !important;
-            }
-            table[class="wrapper-padding"] {
-                padding: 20px !important;
-            }
-            tr[class="wrapper-padding"] {
-                padding: 20px !important;
-            }
-            td[class="wrapper-padding"] {
-                padding: 20px !important;
-            }
-            td[class="col-padding-bottom"] {
-                padding: 0 0 25px 0 !important;
-            }
-            img[class="photo"] {
-                width: 100% !important;
-                height: auto !important;
-            }
-            td[class="row"] {
-                width: 100% !important;
-            }
-            td[class="tmp--hide"] {
-                display: none !important;
-            }
-        }
-    </style>
-</head>
-
-<!-- background color -->
-
-<body bgcolor="#ffffff">
-
-    <!-- background color -->
-    <table bgcolor="#ffffff" width="600" align="center" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-            <td>
-                <!-- logo content area-->
-                <table style='background-color:#eaeaea;' class='tmp--container' width='600' align='center' border='0' cellspacing='0' cellpadding='0'>
-                    <tr>
-                        <td width='100%' style='padding:20px 25px 20px 25px;'>
-                            <center><img width='250' id='style-header-logo' src='https://s3-us-west-2.amazonaws.com/rd-industry-emails/healthcare-life-sciences/makana/branding-assets/email-templates/branding-MakanaHealth-logo-header-navy-2x.png'></center>
-                        </td>
-                    </tr>
-                </table>
-                <!-- end content area -->
-
-
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-                <!-- content area -->
-                <div data-type="slot" data-key="cell2"></div>
-                <!-- end content area -->
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-                <!-- content area -->
-                <div data-type="slot" data-key="cell3"></div>
-                <!-- end content area -->
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-                <!-- content area -->
-                <div data-type="slot" data-key="cell4"></div>
-                <!-- end content area -->
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-                <!-- content area -->
-                <div data-type="slot" data-key="cell5"></div>
-                <!-- end content area -->
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-                <!-- content area -->
-                <div data-type="slot" data-key="cell6"></div>
-                <!-- end content area -->
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-                <!-- content area -->
-                <div data-type="slot" data-key="cell7"></div>
-                <!-- end content area -->
-            </td>
-        </tr>
-
-        <tr>
-            <td>
-
-
-                <!-- footer content area -->
-                <table style='background-color:#eaeaea;' class='tmp--container' width='600' align='center' border='0' cellspacing='0' cellpadding='0'>
-                    <tr>
-                        <td class='tmp--full-width-center' width='100%' align='center' style='padding:25px 20px 0 20px;'><img width='50' id='style-footer-logo' src='https://s3-us-west-2.amazonaws.com/rd-industry-emails/healthcare-life-sciences/makana/branding-assets/email-templates/branding-MakanaHealth-logo-footer-navy-2x.png'></td>
-                    </tr>
-                </table>
-                <table style='background-color:#eaeaea;' class='tmp--container' width='600' align='center' border='0' cellspacing='0' cellpadding='0'>
-                    <tr>
-                        <td style='color:#404860;font-family:Gotham, Arial, sans-serif;font-size:11px;font-style:normal;font-weight:normal;padding:20px 20px 10px 20px;' class='tmp--full-width-center' width='100%' align='center' width='432'><a href="%%view_email_url%%" alias="Web Version" target="_blank" style="color:#404860;text-decoration:none;">View as a Webpage</a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style='color:#404860;font-family:Gotham, Arial, sans-serif;font-size:11px;font-style:normal;font-weight:normal;padding:10px 20px 20px 20px;' class='tmp--full-width-center' width='100%' align='center' width='432'>%%Member_Busname%%
-                            <br />%%Member_Addr%% %%Member_City%%, %%Member_State%%, %%Member_PostalCode%%, %%Member_Country%%.
-                            <br />
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="font-family:Gotham, Helvetica, Arial, sans-serif; text-align:center; color:#ffffff; font-size:11px; font-weight:bold; line-height:14px; padding:0 25px 15px 25px;">
-                            <img width="30" src="https://s3-us-west-2.amazonaws.com/rd-industry-emails/healthcare-life-sciences/makana/branding-assets/email-templates/branding-MakanaHealth-social-icon-website-navy.png" style="padding:0px 5px;" />
-                            <img width="30" src="https://s3-us-west-2.amazonaws.com/rd-industry-emails/healthcare-life-sciences/makana/branding-assets/email-templates/branding-MakanaHealth-social-icon-facebook-navy.png" style="padding:0px 5px;" />
-                            <img width="30" src="https://s3-us-west-2.amazonaws.com/rd-industry-emails/healthcare-life-sciences/makana/branding-assets/email-templates/branding-MakanaHealth-social-icon-twitter-navy.png" style="padding:0px 5px;" />
-                            <img width="30" src="https://s3-us-west-2.amazonaws.com/rd-industry-emails/healthcare-life-sciences/makana/branding-assets/email-templates/branding-MakanaHealth-social-icon-instagram-navy.png" style="padding:0px 5px;" />
-                        </td>
-                    </tr>
-                </table>
-                <table style='background-color:#eaeaea;' class='tmp--container' width='600' border='0' align='center' cellpadding='0' cellspacing='0'>
-                    <tr>
-                        <td style="font-family:Gotham, Helvetica, Arial, sans-serif;text-align:center;color:#404860;font-size:11px;font-style:normal;font-weight:normal;line-height:14px;padding:0 25px 35px 25px;">
-                            <a href="%%profile_center_url%%" alias="Profile Center" target="_blank" style="color:#404860;text-decoration:none;">Profile Center</a> <span style="color:#aa95d1; padding:0 5px;">|</span>
-                            <a href="%%subscription_center_url%%" alias="Manage Subscriptions" target="_blank" style="color:#404860;text-decoration:none;">Manage Subscriptions
-                  </a> <span style="color:#aa95d1; padding:0 5px;">|</span>
-                            <a target="_blank" href="%%unsub_center_url%%" alias="Unsubscribe" title="Unsubscribe" style="color:#404860;text-decoration:none;">Unsubscribe
-                  </a>
-                        </td>
-                    </tr>
-                </table>
-                <!-- end content area -->
-
-
-            </td>
-        </tr>
-    </table>
-
-    <div id="tracking_pixel">
-        <custom name="opencounter" type="tracking">
-    </div>
-    <div id="campaign_pixel">
-    </div>
-</body>
-
-</html>`;
-
-      // Create a fallback sample template
-      hubspotTemplates = [
-        {
-          id: 'sample-template-1',
-          name: 'Grey Template Sample',
-          source: sampleTemplateContent,
-          type: 'EMAIL'
-        },
-        {
-          id: 'sample-template-2',
-          name: 'Basic Email Template',
-          source: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Basic Email Template</title>
-            </head>
-            <body>
-              <div data-type="slot" data-key="header">
-                <h1>Email Header</h1>
-              </div>
-              <div data-type="slot" data-key="content">
-                <p>This is the main content area of your email. Customize this section with your message.</p>
-              </div>
-              <div data-type="slot" data-key="footer">
-                <p>Company footer information</p>
-              </div>
-            </body>
-            </html>
-          `,
-          type: 'EMAIL'
-        }
-      ];
+    // If no templates found
+    if (hubspotTemplates.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No email templates found in HubSpot',
+        migrated: [],
+        templatesCount: 0
+      });
     }
     
     // Filter email templates if needed
@@ -437,26 +270,13 @@ export async function POST(request: Request) {
       template.type === 'EMAIL' || 
       template.categoryId === 'EMAIL' || 
       (template.labels && template.labels.includes('EMAIL'))
-    );
+    ) || hubspotTemplates; // If no email templates found, use all templates
     
     // Limit the number of templates to migrate
     const templateToMigrate = emailTemplates.slice(0, limit);
     
     // Log count of templates
     console.log(`Found ${hubspotTemplates.length} total templates, ${emailTemplates.length} email templates, migrating ${templateToMigrate.length}`);
-    
-    // If no templates found
-    if (templateToMigrate.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: 'No email templates found to migrate',
-        migrated: [],
-        templatesCount: 0
-      });
-    }
-    
-    // SFMC default folder ID for Content Builder, use provided or default
-    const contentBuilderFolderId = folderId || 12345; 
     
     // Migration results
     const results = [];
