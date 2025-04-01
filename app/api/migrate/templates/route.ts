@@ -223,47 +223,64 @@ export async function POST(request: Request) {
     let hubspotTemplates = [];
     
     try {
-      // Use the Marketing Email Templates API based on the documentation
+      // Use the CMS API endpoint for templates as the main approach
       try {
-        const response = await axios.get('https://api.hubapi.com/marketing/v3/marketing-emails/templates', {
+        console.log('Trying CMS API endpoint for templates...');
+        const response = await axios.get('https://api.hubapi.com/content/api/v2/templates', {
           headers: {
             'Authorization': `Bearer ${hubspotAccessToken}`,
             'Content-Type': 'application/json'
           }
         });
         
-        // The response structure is different from the CMS API
-        hubspotTemplates = response.data.results || [];
-        console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API v3`);
-      } catch (v3Error: any) {
-        console.warn('V3 Marketing Email Templates API failed, trying legacy v1 endpoint', v3Error.message);
+        // The response structure for CMS templates
+        hubspotTemplates = response.data.objects || [];
+        console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot CMS API`);
+      } catch (cmsError: any) {
+        console.warn('CMS Templates API failed, trying Marketing Email v3 endpoint', cmsError.message);
         
+        // Try the Marketing Email Templates API as fallback
         try {
-          // Try the legacy v1 endpoint
-          const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/templates', {
+          const response = await axios.get('https://api.hubapi.com/marketing/v3/marketing-emails/templates', {
             headers: {
               'Authorization': `Bearer ${hubspotAccessToken}`,
               'Content-Type': 'application/json'
             }
           });
           
-          // The response structure is different for v1
-          hubspotTemplates = response.data || [];
-          console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API v1`);
-        } catch (v1Error: any) {
-          console.warn('V1 Marketing Email Templates API failed, trying email public API', v1Error.message);
+          // The response structure is different from the CMS API
+          hubspotTemplates = response.data.results || [];
+          console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API v3`);
+        } catch (v3Error: any) {
+          console.warn('V3 Marketing Email Templates API failed, trying legacy v1 endpoint', v3Error.message);
           
-          // Try the email public API
-          const response = await axios.get('https://api.hubapi.com/email/public/v1/templates', {
-            headers: {
-              'Authorization': `Bearer ${hubspotAccessToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          // The response structure is different for this API
-          hubspotTemplates = response.data.objects || [];
-          console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Email Public API`);
+          try {
+            // Try the legacy v1 endpoint
+            const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/templates', {
+              headers: {
+                'Authorization': `Bearer ${hubspotAccessToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            // The response structure is different for v1
+            hubspotTemplates = response.data || [];
+            console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API v1`);
+          } catch (v1Error: any) {
+            console.warn('V1 Marketing Email Templates API failed, trying email public API', v1Error.message);
+            
+            // Try the email public API
+            const response = await axios.get('https://api.hubapi.com/email/public/v1/templates', {
+              headers: {
+                'Authorization': `Bearer ${hubspotAccessToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            // The response structure is different for this API
+            hubspotTemplates = response.data.objects || [];
+            console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Email Public API`);
+          }
         }
       }
     } catch (error: any) {
@@ -313,11 +330,40 @@ export async function POST(request: Request) {
       try {
         console.log(`Processing template: ${template.name} (ID: ${template.id})`);
         
-        // In Marketing Email Templates API, the HTML content is in template.content
-        const templateContent = template.content || '';
+        // Get template content based on the API that returned it
+        let templateContent = '';
+        
+        // Check if it's a CMS template (has source or html property)
+        if (template.source) {
+          console.log('Processing a CMS template with source property');
+          templateContent = template.source;
+        } 
+        // Check if it's a marketing email template (has content property)
+        else if (template.content) {
+          console.log('Processing a Marketing Email template with content property');
+          templateContent = template.content;
+        }
+        // If it's an email public template (might have html property)
+        else if (template.html) {
+          console.log('Processing an Email Public template with html property');
+          templateContent = template.html;
+        }
+        // Try to find any property that might contain HTML
+        else {
+          // Look for properties that might contain HTML content
+          const possibleContentProperties = ['body', 'htmlContent', 'htmlBody', 'design', 'template'];
+          for (const prop of possibleContentProperties) {
+            if (template[prop] && typeof template[prop] === 'string' && template[prop].includes('<')) {
+              console.log(`Found template content in '${prop}' property`);
+              templateContent = template[prop];
+              break;
+            }
+          }
+        }
         
         if (!templateContent) {
-          console.warn(`Template ${template.name} has no content, skipping`);
+          console.warn(`Template ${template.name} has no identifiable content, skipping`);
+          console.warn('Template properties:', Object.keys(template));
           continue;
         }
         

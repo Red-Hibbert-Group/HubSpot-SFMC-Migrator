@@ -71,7 +71,31 @@ export const mapContactData = (
 
 // Convert HubSpot template to SFMC template format
 export const convertHubspotTemplate = (hubspotTemplate: Record<string, any>) => {
-  let content = hubspotTemplate.source || hubspotTemplate.html || '';
+  let content = hubspotTemplate.source || hubspotTemplate.html || hubspotTemplate.content || '';
+  
+  // If template is from CMS API, it might have different structure
+  if (!content && hubspotTemplate.template_type === 'EMAIL' && hubspotTemplate.widget_containers) {
+    try {
+      // CMS templates might have a different structure with containers
+      content = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${hubspotTemplate.label || hubspotTemplate.name || 'Email Template'}</title>
+</head>
+<body>
+  ${hubspotTemplate.widget_containers ? 
+    Object.entries(hubspotTemplate.widget_containers).map(([key, container]: [string, any]) => 
+      `<div data-type="slot" data-key="${key}">${container.body || ''}</div>`
+    ).join('\n  ') 
+    : '<div data-type="slot" data-key="content"></div>'}
+</body>
+</html>`;
+    } catch (error) {
+      console.error('Error parsing CMS template structure:', error);
+      content = `<p>Template: ${hubspotTemplate.name || 'Untitled'}</p>`;
+    }
+  }
   
   // Replace HubSpot personalization tokens with SFMC AMPscript
   content = content.replace(/\{\{contact\.([^}]+)\}\}/g, '%%=v(@$1)=%%');
@@ -92,7 +116,7 @@ export const convertHubspotTemplate = (hubspotTemplate: Record<string, any>) => 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${hubspotTemplate.name || 'Migrated Template'}</title>
+  <title>${hubspotTemplate.name || hubspotTemplate.label || 'Migrated Template'}</title>
   <style>
     body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
     .content { padding: 20px; }
