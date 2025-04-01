@@ -5,6 +5,7 @@ import { getHubspotMarketingEmails, getHubspotEmailDetails } from '@/app/lib/hub
 import { createSFMCEmail, getSFMCToken, getSFMCFolders, createSFMCFolder } from '@/app/lib/sfmc';
 import { getIntegrationTokens } from '@/app/supabase/client';
 import { convertHubspotEmail } from '@/app/utils/migrationUtils';
+import axios from 'axios';
 
 export async function POST(request: Request) {
   try {
@@ -153,10 +154,62 @@ export async function POST(request: Request) {
     let marketingEmails = [];
     
     try {
-      // Fetch the marketing emails
-      marketingEmails = await getHubspotMarketingEmails(hubspotAccessToken, limit);
-      console.log(`Retrieved ${marketingEmails.length} marketing emails from HubSpot`);
-    } catch (error) {
+      // Fetch the marketing emails with statistics
+      try {
+        marketingEmails = await getHubspotMarketingEmails(hubspotAccessToken, limit);
+        console.log(`Retrieved ${marketingEmails.length} marketing emails from statistics endpoint`);
+      } catch (statsError: any) {
+        console.warn('Error fetching from statistics endpoint, trying legacy endpoint:', statsError.message);
+        
+        // Try the legacy marketing emails endpoint instead
+        try {
+          console.log('Trying legacy marketing emails API');
+          const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/emails', {
+            headers: {
+              'Authorization': `Bearer ${hubspotAccessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          // Process the response from legacy API
+          marketingEmails = response.data || [];
+          console.log(`Retrieved ${marketingEmails.length} marketing emails from legacy API`);
+        } catch (legacyError: any) {
+          console.error('Legacy email API failed:', legacyError.message);
+          
+          // Try campaigns API as final fallback
+          try {
+            console.log('Trying campaigns API as final fallback');
+            const campaignsResponse = await axios.get('https://api.hubapi.com/email/public/v1/campaigns', {
+              headers: {
+                'Authorization': `Bearer ${hubspotAccessToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            // Process campaigns which contain email data
+            const campaigns = campaignsResponse.data?.campaigns || campaignsResponse.data || [];
+            marketingEmails = campaigns.map((campaign: any) => ({
+              id: campaign.id || campaign.campaignId,
+              name: campaign.name,
+              subject: campaign.subject,
+              type: 'EMAIL',
+              createdAt: campaign.lastUpdatedTime,
+              updatedAt: campaign.lastUpdatedTime,
+              state: campaign.isPublished ? 'PUBLISHED' : 'DRAFT',
+              // Add any other fields needed
+            }));
+            
+            console.log(`Retrieved ${marketingEmails.length} emails from campaigns API`);
+          } catch (campaignsError: any) {
+            console.error('All email APIs failed:', campaignsError.message);
+            throw new Error('Failed to fetch marketing emails from all available HubSpot APIs');
+          }
+        }
+      }
+      
+      console.log(`Retrieved a total of ${marketingEmails.length} marketing emails from HubSpot`);
+    } catch (error: any) {
       console.error('Error fetching marketing emails from HubSpot:', error);
       
       // Get details about the error
@@ -201,7 +254,7 @@ export async function POST(request: Request) {
         try {
           emailDetails = await getHubspotEmailDetails(hubspotAccessToken, email.id);
           console.log(`Retrieved detailed content for email ID ${email.id}`);
-        } catch (detailsError) {
+        } catch (detailsError: any) {
           console.warn(`Could not retrieve detailed content for email ID ${email.id}:`, detailsError.message);
           // Continue with basic info only
         }

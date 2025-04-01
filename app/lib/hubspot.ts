@@ -153,8 +153,13 @@ export const getHubspotTemplates = async (client: Client) => {
 // Fetch marketing emails from HubSpot
 export const getHubspotMarketingEmails = async (accessToken: string, limit = 100, after?: string) => {
   try {
-    // Build URL with pagination parameters
-    let url = `https://api.hubapi.com/marketing/v3/emails/statistics/list?limit=${limit}`;
+    // Set a default start timestamp of 1 year ago (required parameter for the API)
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const startTimestamp = Math.floor(oneYearAgo.getTime());
+    
+    // Build URL with required parameters
+    let url = `https://api.hubapi.com/marketing/v3/emails/statistics/list?limit=${limit}&startTimestamp=${startTimestamp}`;
     if (after) {
       url += `&after=${after}`;
     }
