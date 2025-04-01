@@ -172,12 +172,36 @@ export const convertHubspotEmail = (
   
   // Try to extract HTML content from email details
   if (emailDetails) {
-    // Extract content from email details - might be in htmlBody, content, or body
-    emailContent = emailDetails.htmlBody || 
-                  emailDetails.content || 
-                  emailDetails.body || 
-                  emailDetails.design || 
-                  '';
+    console.log(`Looking for content in email details for ${emailName}`);
+    
+    // Direct content fields in order of preference
+    const contentFields = [
+      'html', 'htmlBody', 'content', 'body', 'design', 
+      'tsPrettyHtml', 'tsHtml', 'cleanedHtml', 'originalHtml'
+    ];
+    
+    // Try each field
+    for (const field of contentFields) {
+      if (emailDetails[field] && typeof emailDetails[field] === 'string') {
+        emailContent = emailDetails[field];
+        console.log(`Found content in '${field}' property`);
+        break;
+      }
+    }
+    
+    // Check nested properties
+    if (!emailContent) {
+      if (emailDetails.body && emailDetails.body.value) {
+        emailContent = emailDetails.body.value;
+        console.log(`Found content in 'body.value' property`);
+      } else if (emailDetails.content && emailDetails.content.html) {
+        emailContent = emailDetails.content.html;
+        console.log(`Found content in 'content.html' property`);
+      } else if (emailDetails.email && emailDetails.email.body) {
+        emailContent = emailDetails.email.body;
+        console.log(`Found content in 'email.body' property`);
+      }
+    }
     
     // Update metadata if available in details
     if (emailDetails.subject) subject = emailDetails.subject;
@@ -187,7 +211,10 @@ export const convertHubspotEmail = (
   
   // Clean up content if needed
   if (!emailContent || emailContent.trim() === '') {
+    console.warn(`No content found for email ${emailName}, using placeholder`);
     emailContent = `<p>Email: ${emailName}</p>`;
+  } else {
+    console.log(`Found HTML content for email ${emailName}, length: ${emailContent.length} characters`);
   }
   
   // Format the content for SFMC

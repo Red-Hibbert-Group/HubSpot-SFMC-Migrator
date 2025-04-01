@@ -201,14 +201,30 @@ export const getHubspotMarketingEmails = async (accessToken: string, limit = 100
 // Get details for a specific marketing email
 export const getHubspotEmailDetails = async (accessToken: string, emailId: string) => {
   try {
-    const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    return response.data;
+    // First try to get all details including content
+    try {
+      const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}?includeContent=true`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log(`Retrieved email details with content for ID ${emailId}`);
+      return response.data;
+    } catch (contentError) {
+      console.warn(`Error getting email with content: ${contentError.message}, trying without content parameter`);
+      
+      // Fallback to request without content parameter
+      const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      return response.data;
+    }
   } catch (error) {
     console.error(`Error fetching details for email ID ${emailId}:`, error);
     if (error.response) {
