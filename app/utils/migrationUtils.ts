@@ -184,18 +184,44 @@ export const convertHubspotEmail = (
     if (emailDetails.fromName) fromName = emailDetails.fromName;
     if (emailDetails.fromEmail) fromEmail = emailDetails.fromEmail;
   }
+  
+  // Clean up content if needed
+  if (!emailContent || emailContent.trim() === '') {
+    emailContent = `<p>Email: ${emailName}</p>`;
+  }
+  
+  // Format the content for SFMC
+  // We'll include the content directly rather than using slots which cause issues
+  let formattedContent = emailContent;
+  
+  // If content doesn't appear to be HTML, wrap it
+  if (!formattedContent.includes('<')) {
+    formattedContent = `<p>${formattedContent}</p>`;
+  }
+  
+  // Simplify by wrapping in minimal HTML if it doesn't have html/body tags
+  if (!formattedContent.includes('<html') && !formattedContent.includes('<body')) {
+    formattedContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        ${formattedContent}
+      </div>
+    `;
+  }
+  
+  // Replace HubSpot personalization tokens with SFMC AMPscript
+  formattedContent = formattedContent.replace(/\{\{contact\.([^}]+)\}\}/g, '%%=v(@$1)=%%');
+  
+  // Replace HubSpot conditional logic with AMPscript
+  formattedContent = formattedContent.replace(
+    /\{% if ([^}]+) %\}(.*?)\{% endif %\}/gs,
+    '%%[ IF $1 ]%%$2%%[ ENDIF ]%%'
+  );
 
-  // Create template structure
-  const templateContent = convertHubspotTemplate({
-    name: emailName,
-    source: emailContent
-  });
-
-  // Create email object for SFMC
+  // Create email object for SFMC - avoid using slots structure 
   return {
     name: emailName,
     subject: subject,
-    content: templateContent.content,
+    content: formattedContent,
     fromName: fromName,
     fromEmail: fromEmail,
     status: hubspotEmail.state === 'PUBLISHED' ? 'Active' : 'Inactive',
@@ -203,9 +229,7 @@ export const convertHubspotEmail = (
     campaignName: hubspotEmail.campaignName || '',
     createdAt: hubspotEmail.createdAt || new Date().toISOString(),
     updatedAt: hubspotEmail.updatedAt || new Date().toISOString(),
-    emailType: hubspotEmail.type || 'HTML',
-    slots: templateContent.slots,
-    channels: templateContent.channels
+    emailType: hubspotEmail.type || 'HTML'
   };
 };
 

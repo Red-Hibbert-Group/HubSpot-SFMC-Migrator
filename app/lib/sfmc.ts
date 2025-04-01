@@ -550,15 +550,22 @@ export const createSFMCEmail = async (
   try {
     // Set default values
     const channels = email.channels || { email: true, web: false };
-    const slots = email.slots || {};
     
+    // For SFMC, we need to create a simpler request without slot definitions
+    // but with properly formatted content
     const requestBody: Record<string, any> = {
       name: email.name,
-      // Use 'html' instead of 'content' as content is a reserved keyword
-      html: email.content,
       assetType: { name: 'htmlemail', id: 208 }, // HTML Email type
       category: {
         id: folderId
+      },
+      views: {
+        html: {
+          content: email.content
+        },
+        text: {
+          content: email.name
+        }
       },
       data: {
         email: {
@@ -581,44 +588,43 @@ export const createSFMCEmail = async (
       requestBody.channels = channels;
     }
     
-    // Add slots if provided
-    if (Object.keys(slots).length > 0) {
-      requestBody.slots = slots;
-    }
+    console.log('Creating SFMC email with new request body structure:', JSON.stringify(requestBody, null, 2));
     
-    console.log('Creating SFMC email with request body:', JSON.stringify(requestBody, null, 2));
+    const response = await axios.post(
+      `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/assets`,
+      requestBody,
+      {
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
     
-    try {
-      const response = await axios.post(
-        `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/assets`,
-        requestBody,
-        {
-          headers: {
-            'Authorization': `Bearer ${auth.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+    console.log('SFMC email creation response:', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error: any) {
+    console.error('Error creating SFMC Email:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Error details:', JSON.stringify(error.response.data, null, 2));
       
-      console.log('SFMC email creation response:', JSON.stringify(response.data, null, 2));
-      return response.data;
-    } catch (error: any) {
-      // If we get the reserved keyword error, try with a different property name
-      if (
-        error.response?.status === 400 && 
-        error.response.data?.validationErrors?.some((err: any) => 
-          err.message?.includes('reserved keyword')
-        )
-      ) {
-        console.log('Received reserved keyword error, trying alternative approach with messageBody...');
+      // If we still have errors, try with a different structure as last resort
+      try {
+        // Last resort approach: Create email as plain HTML content
+        console.log('Trying final approach: simple email with minimal structure');
         
-        // Create a completely new request body with messageBody instead of html/content
-        const alternativeBody: Record<string, any> = {
+        const simpleBody: Record<string, any> = {
           name: email.name,
-          messageBody: email.content,
           assetType: { name: 'htmlemail', id: 208 },
-          category: {
-            id: folderId
+          category: { id: folderId },
+          views: {
+            html: {
+              content: `<!DOCTYPE html><html><head><title>${email.name}</title></head><body>${email.content}</body></html>`
+            },
+            text: {
+              content: email.name
+            }
           },
           data: {
             email: {
@@ -627,27 +633,15 @@ export const createSFMCEmail = async (
           }
         };
         
-        // Add sender information if provided
+        // Add sender information
         if (email.fromName || email.fromEmail) {
-          alternativeBody.data.email.emailFromName = email.fromName || '';
-          alternativeBody.data.email.emailFromEmail = email.fromEmail || '';
+          simpleBody.data.email.emailFromName = email.fromName || '';
+          simpleBody.data.email.emailFromEmail = email.fromEmail || '';
         }
         
-        // Add channels if provided
-        if (channels) {
-          alternativeBody.channels = channels;
-        }
-        
-        // Add slots if provided
-        if (Object.keys(slots).length > 0) {
-          alternativeBody.slots = slots;
-        }
-        
-        console.log('Using alternative request structure:', JSON.stringify(alternativeBody, null, 2));
-        
-        const retryResponse = await axios.post(
+        const finalResponse = await axios.post(
           `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/assets`,
-          alternativeBody,
+          simpleBody,
           {
             headers: {
               'Authorization': `Bearer ${auth.accessToken}`,
@@ -656,21 +650,17 @@ export const createSFMCEmail = async (
           }
         );
         
-        console.log('SFMC email creation retry response:', JSON.stringify(retryResponse.data, null, 2));
-        return retryResponse.data;
+        console.log('Simple email creation success:', JSON.stringify(finalResponse.data, null, 2));
+        return finalResponse.data;
+      } catch (finalError: any) {
+        console.error('Final attempt failed:', finalError.message);
+        if (finalError.response) {
+          console.error('Final error details:', JSON.stringify(finalError.response.data, null, 2));
+        }
+        throw finalError;
       }
-      
-      // Re-throw the original error if it's not the reserved keyword issue
-      console.error('Error creating SFMC Email:', error);
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', JSON.stringify(error.response.data, null, 2));
-      }
-      throw error;
     }
-  } catch (outerError: any) {
-    console.error('Outer error creating SFMC Email:', outerError);
-    throw outerError;
+    throw error;
   }
 };
 
