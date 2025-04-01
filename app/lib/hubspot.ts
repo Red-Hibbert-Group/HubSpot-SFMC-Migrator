@@ -150,6 +150,69 @@ export const getHubspotTemplates = async (client: Client) => {
   }
 };
 
+// Fetch marketing emails from HubSpot
+export const getHubspotMarketingEmails = async (accessToken: string, limit = 100, after?: string) => {
+  try {
+    // Build URL with pagination parameters
+    let url = `https://api.hubapi.com/marketing/v3/emails/statistics/list?limit=${limit}`;
+    if (after) {
+      url += `&after=${after}`;
+    }
+    
+    console.log(`Fetching marketing emails from: ${url}`);
+    
+    const response = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const emails = response.data.results || [];
+    console.log(`Fetched ${emails.length} marketing emails`);
+    
+    // If there's pagination info and we need to fetch more
+    if (response.data.paging && response.data.paging.next && response.data.paging.next.after) {
+      const nextAfter = response.data.paging.next.after;
+      console.log(`Found pagination info, fetching next page with after=${nextAfter}`);
+      
+      // Recursively fetch the next page
+      const nextEmails = await getHubspotMarketingEmails(accessToken, limit, nextAfter);
+      return [...emails, ...nextEmails];
+    }
+    
+    return emails;
+  } catch (error) {
+    console.error('Error fetching HubSpot marketing emails:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
+  }
+};
+
+// Get details for a specific marketing email
+export const getHubspotEmailDetails = async (accessToken: string, emailId: string) => {
+  try {
+    const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching details for email ID ${emailId}:`, error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
+  }
+};
+
 export const getHubspotForms = async (client: Client) => {
   try {
     const response = await axios.get('https://api.hubapi.com/forms/v2/forms', {

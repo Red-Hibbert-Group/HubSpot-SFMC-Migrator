@@ -532,6 +532,84 @@ export const createEmailTemplate = async (
   }
 };
 
+// Create a full email in SFMC Content Builder
+export const createSFMCEmail = async (
+  auth: SFMCAuth & { accessToken: string },
+  email: {
+    name: string;
+    subject: string;
+    content: string;
+    fromName?: string;
+    fromEmail?: string;
+    status?: string;
+    slots?: Record<string, any>;
+    channels?: { email?: boolean; web?: boolean };
+  },
+  folderId: number
+) => {
+  try {
+    // Set default values
+    const channels = email.channels || { email: true, web: false };
+    const slots = email.slots || {};
+    
+    const requestBody: Record<string, any> = {
+      name: email.name,
+      content: email.content,
+      assetType: { name: 'htmlemail', id: 208 }, // HTML Email type
+      category: {
+        id: folderId
+      },
+      data: {
+        email: {
+          subject: email.subject
+        }
+      }
+    };
+    
+    // Add sender information if provided
+    if (email.fromName || email.fromEmail) {
+      if (!requestBody.data) requestBody.data = {};
+      if (!requestBody.data.email) requestBody.data.email = {};
+      
+      requestBody.data.email.emailFromName = email.fromName || '';
+      requestBody.data.email.emailFromEmail = email.fromEmail || '';
+    }
+    
+    // Add channels if provided
+    if (channels) {
+      requestBody.channels = channels;
+    }
+    
+    // Add slots if provided
+    if (Object.keys(slots).length > 0) {
+      requestBody.slots = slots;
+    }
+    
+    console.log('Creating SFMC email with request body:', JSON.stringify(requestBody, null, 2));
+    
+    const response = await axios.post(
+      `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/assets`,
+      requestBody,
+      {
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    
+    console.log('SFMC email creation response:', JSON.stringify(response.data, null, 2));
+    return response.data;
+  } catch (error: any) {
+    console.error('Error creating SFMC Email:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
+  }
+};
+
 // Create a CloudPage in SFMC
 export const createCloudPage = async (
   auth: SFMCAuth & { accessToken: string },

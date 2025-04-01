@@ -50,6 +50,7 @@ function DashboardContent() {
   const [migrationStatus, setMigrationStatus] = useState<Record<string, MigrationStatus>>({
     contacts: 'idle',
     templates: 'idle',
+    emails: 'idle',
     forms: 'idle',
     workflows: 'idle',
   });
@@ -608,6 +609,18 @@ function DashboardContent() {
                 Convert HubSpot email templates to SFMC Content Builder templates or upload your own custom templates.
               </p>
               {renderMigrationResults('templates')}
+            </div>
+
+            {/* Marketing Emails Migration */}
+            <div className="border-b border-gray-200 pb-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium">Marketing Emails</h3>
+                {renderMigrationButton('emails')}
+              </div>
+              <p className="text-gray-600 mb-2">
+                Migrate your HubSpot marketing emails to SFMC Content Builder emails, including subject lines and content.
+              </p>
+              {renderMigrationResults('emails')}
             </div>
             
             {/* Forms Migration */}

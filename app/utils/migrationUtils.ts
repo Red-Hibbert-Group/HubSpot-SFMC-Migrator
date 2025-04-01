@@ -158,6 +158,57 @@ export const convertHubspotTemplate = (hubspotTemplate: Record<string, any>) => 
   };
 };
 
+// Convert HubSpot marketing email to SFMC email
+export const convertHubspotEmail = (
+  hubspotEmail: Record<string, any>, 
+  emailDetails?: Record<string, any>
+) => {
+  // Basic properties
+  const emailName = hubspotEmail.name || `Migrated Email ${hubspotEmail.id}`;
+  let subject = hubspotEmail.subject || emailDetails?.subject || emailName;
+  let emailContent = '';
+  let fromName = hubspotEmail.fromName || emailDetails?.fromName || 'Marketing Team';
+  let fromEmail = hubspotEmail.fromEmail || emailDetails?.fromEmail || '';
+  
+  // Try to extract HTML content from email details
+  if (emailDetails) {
+    // Extract content from email details - might be in htmlBody, content, or body
+    emailContent = emailDetails.htmlBody || 
+                  emailDetails.content || 
+                  emailDetails.body || 
+                  emailDetails.design || 
+                  '';
+    
+    // Update metadata if available in details
+    if (emailDetails.subject) subject = emailDetails.subject;
+    if (emailDetails.fromName) fromName = emailDetails.fromName;
+    if (emailDetails.fromEmail) fromEmail = emailDetails.fromEmail;
+  }
+
+  // Create template structure
+  const templateContent = convertHubspotTemplate({
+    name: emailName,
+    source: emailContent
+  });
+
+  // Create email object for SFMC
+  return {
+    name: emailName,
+    subject: subject,
+    content: templateContent.content,
+    fromName: fromName,
+    fromEmail: fromEmail,
+    status: hubspotEmail.state === 'PUBLISHED' ? 'Active' : 'Inactive',
+    originalId: hubspotEmail.id,
+    campaignName: hubspotEmail.campaignName || '',
+    createdAt: hubspotEmail.createdAt || new Date().toISOString(),
+    updatedAt: hubspotEmail.updatedAt || new Date().toISOString(),
+    emailType: hubspotEmail.type || 'HTML',
+    slots: templateContent.slots,
+    channels: templateContent.channels
+  };
+};
+
 // Map HubSpot form to SFMC CloudPage form
 export const convertHubspotForm = (hubspotForm: Record<string, any>) => {
   const fields = hubspotForm.formFieldGroups
