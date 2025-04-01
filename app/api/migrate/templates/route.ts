@@ -223,17 +223,49 @@ export async function POST(request: Request) {
     let hubspotTemplates = [];
     
     try {
-      // Use the Marketing Email Templates API instead of CMS Templates API
-      const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/templates', {
-        headers: {
-          'Authorization': `Bearer ${hubspotAccessToken}`,
-          'Content-Type': 'application/json'
+      // Use the Marketing Email Templates API based on the documentation
+      try {
+        const response = await axios.get('https://api.hubapi.com/marketing/v3/marketing-emails/templates', {
+          headers: {
+            'Authorization': `Bearer ${hubspotAccessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        // The response structure is different from the CMS API
+        hubspotTemplates = response.data.results || [];
+        console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API v3`);
+      } catch (v3Error: any) {
+        console.warn('V3 Marketing Email Templates API failed, trying legacy v1 endpoint', v3Error.message);
+        
+        try {
+          // Try the legacy v1 endpoint
+          const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/templates', {
+            headers: {
+              'Authorization': `Bearer ${hubspotAccessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          // The response structure is different for v1
+          hubspotTemplates = response.data || [];
+          console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API v1`);
+        } catch (v1Error: any) {
+          console.warn('V1 Marketing Email Templates API failed, trying email public API', v1Error.message);
+          
+          // Try the email public API
+          const response = await axios.get('https://api.hubapi.com/email/public/v1/templates', {
+            headers: {
+              'Authorization': `Bearer ${hubspotAccessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          // The response structure is different for this API
+          hubspotTemplates = response.data.objects || [];
+          console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Email Public API`);
         }
-      });
-      
-      // The response structure is different from the CMS API
-      hubspotTemplates = response.data || [];
-      console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API`);
+      }
     } catch (error: any) {
       console.error('Error fetching templates directly from HubSpot:', error);
       
