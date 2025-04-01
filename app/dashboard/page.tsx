@@ -218,14 +218,18 @@ function DashboardContent() {
       return;
     }
     
+    console.log(`Starting migration for module: ${module}, current status: ${migrationStatus[module]}`);
+    
     // For templates module, prompt for folder ID if it's a new migration
     if (module === 'templates' && migrationStatus[module] === 'idle') {
+      console.log('Opening folder selection modal for templates migration');
       setMigrationModule(module);
       setShowFolderModal(true);
       return;
     }
     
     try {
+      console.log(`Setting migration status to loading for ${module}`);
       setMigrationStatus(prev => ({
         ...prev,
         [module]: 'loading'
@@ -241,11 +245,18 @@ function DashboardContent() {
       
       // Add folder ID for templates if provided
       if (module === 'templates' && folderIdInput.trim()) {
-        requestData.folderId = parseInt(folderIdInput.trim(), 10);
+        const folderId = parseInt(folderIdInput.trim(), 10);
+        requestData.folderId = folderId;
+        console.log(`Using folder ID: ${folderId} for templates migration`);
+      } else if (module === 'templates') {
+        console.log('No folder ID provided, will auto-create a folder');
       }
 
+      console.log(`Making API request to /api/migrate/${module}`, requestData);
+      
       // Call migration API
       const response = await axios.post(`/api/migrate/${module}`, requestData);
+      console.log(`Migration API response for ${module}:`, response.data);
 
       // Update migration status and results
       setMigrationStatus(prev => ({
@@ -257,8 +268,22 @@ function DashboardContent() {
         ...prev,
         [module]: response.data
       }));
-    } catch (error) {
+      
+      // Reset folder input after successful migration
+      if (module === 'templates') {
+        setFolderIdInput('');
+      }
+    } catch (error: any) {
       console.error(`Error migrating ${module}:`, error);
+      
+      // Get detailed error information
+      let errorDetails = 'Unknown error';
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        errorDetails = error.response.data.error || error.response.data.details || JSON.stringify(error.response.data);
+      } else if (error.message) {
+        errorDetails = error.message;
+      }
       
       setMigrationStatus(prev => ({
         ...prev,
@@ -267,18 +292,35 @@ function DashboardContent() {
       
       setMigrationResults(prev => ({
         ...prev,
-        [module]: { error: 'Migration failed' }
+        [module]: { 
+          error: 'Migration failed', 
+          details: errorDetails
+        }
       }));
+      
+      // Show alert with error details
+      alert(`Migration failed: ${errorDetails}`);
     }
   };
 
   // Handle folder ID submission
   const handleFolderIdSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Ensure we have a valid module to migrate
+    if (!migrationModule) {
+      console.error('No migration module specified');
+      return;
+    }
+    
+    // Close the modal first
     setShowFolderModal(false);
     
-    // Start migration with folder ID
-    startMigration(migrationModule);
+    // Give time for the modal to close before starting migration
+    setTimeout(() => {
+      console.log(`Starting migration for ${migrationModule} with folder ID: ${folderIdInput || 'auto-create'}`);
+      startMigration(migrationModule);
+    }, 100);
   };
 
   // Render connection status badge
@@ -355,6 +397,14 @@ function DashboardContent() {
         <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-md">
           <p className="font-semibold">Error:</p>
           <p>{result.error || 'Unknown error occurred'}</p>
+          {result.details && (
+            <div className="mt-2 text-sm">
+              <p className="font-semibold">Details:</p>
+              <div className="overflow-auto max-h-20 bg-red-100 p-2 rounded">
+                <pre className="whitespace-pre-wrap">{typeof result.details === 'string' ? result.details : JSON.stringify(result.details, null, 2)}</pre>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -363,11 +413,35 @@ function DashboardContent() {
       <div className="mt-4 p-4 bg-green-50 text-green-700 rounded-md">
         <p className="font-semibold">Success:</p>
         <p>{result.message || `Migrated ${result.migrated} items`}</p>
-        {result.migrated > 0 && (
-          <p className="mt-2 text-sm">
-            View details in the logs below
-          </p>
+        {result.migrated && result.migrated.length > 0 && (
+          <div className="mt-2 text-sm">
+            <p className="font-semibold">Migrated {result.migrated.length} items:</p>
+            <ul className="list-disc list-inside pl-2 mt-1">
+              {result.migrated.map((item: any, index: number) => (
+                <li key={index} className="text-xs">
+                  {item.hubspotName || item.customName || `Item ${index + 1}`}
+                </li>
+              )).slice(0, 5)}
+              {result.migrated.length > 5 && <li className="text-xs">...and {result.migrated.length - 5} more</li>}
+            </ul>
+          </div>
         )}
+        {result.errors && result.errors.length > 0 && (
+          <div className="mt-2 text-sm text-red-600">
+            <p className="font-semibold">Errors ({result.errors.length}):</p>
+            <ul className="list-disc list-inside pl-2 mt-1">
+              {result.errors.map((error: any, index: number) => (
+                <li key={index} className="text-xs">
+                  {error.hubspotName || error.customName || `Item ${index + 1}`}: {error.error}
+                </li>
+              )).slice(0, 3)}
+              {result.errors.length > 3 && <li className="text-xs">...and {result.errors.length - 3} more errors</li>}
+            </ul>
+          </div>
+        )}
+        <p className="mt-2 text-xs">
+          View full details in the logs below
+        </p>
       </div>
     );
   };
