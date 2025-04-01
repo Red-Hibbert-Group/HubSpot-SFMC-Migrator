@@ -1,15 +1,17 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
-import { createHubspotClient } from '@/app/lib/hubspot';
+import { createHubspotClient, getHubspotTemplates } from '@/app/lib/hubspot';
 import { createEmailTemplate, getSFMCToken } from '@/app/lib/sfmc';
 import { getIntegrationTokens } from '@/app/supabase/client';
+import { convertHubspotTemplate } from '@/app/utils/migrationUtils';
+import axios from 'axios';
 
 export async function POST(request: Request) {
   try {
     // Get request body
     const body = await request.json();
-    const { userId, hubspotToken, sfmcCredentials, limit = 10 } = body;
+    const { userId, hubspotToken, sfmcCredentials, limit = 10, folderId } = body;
 
     if (!userId) {
       return NextResponse.json(
@@ -93,53 +95,125 @@ export async function POST(request: Request) {
 
     // Initialize HubSpot client
     const hubspotClient = createHubspotClient(hubspotAccessToken);
-
-    // Mock HubSpot email templates (replace with actual HubSpot API call)
-    const templates = [
-      { id: '1', name: 'Welcome Email', html: '<h1>Welcome to our service!</h1>' },
-      { id: '2', name: 'Newsletter', html: '<h1>Latest Updates</h1>' }
-    ];
+    
+    // Fetch HubSpot templates
+    console.log('Fetching HubSpot templates...');
+    const hubspotTemplates = await getHubspotTemplates(hubspotClient);
+    
+    // Filter email templates if needed
+    const emailTemplates = hubspotTemplates.filter((template: any) => 
+      // Include templates that are likely to be email templates
+      template.type === 'EMAIL' || 
+      template.categoryId === 'EMAIL' || 
+      (template.labels && template.labels.includes('EMAIL'))
+    );
+    
+    // Limit the number of templates to migrate
+    const templateToMigrate = emailTemplates.slice(0, limit);
+    
+    // Log count of templates
+    console.log(`Found ${hubspotTemplates.length} total templates, ${emailTemplates.length} email templates, migrating ${templateToMigrate.length}`);
+    
+    // If no templates found
+    if (templateToMigrate.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No email templates found to migrate',
+        migrated: [],
+        templatesCount: 0
+      });
+    }
+    
+    // SFMC default folder ID for Content Builder, use provided or default
+    const contentBuilderFolderId = folderId || 12345; 
     
     // Migration results
     const results = [];
-    
-    // SFMC default folder ID for Content Builder (typically use a dedicated folder)
-    const folderId = 12345; // Replace with actual folder ID or create one dynamically
+    const errors = [];
     
     // Migrate each template
-    for (const template of templates) {
-      // Create template in SFMC
-      const result = await createEmailTemplate(
-        {
-          ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
-          accessToken: sfmcAccessToken,
-        },
-        template.name,
-        template.html,
-        folderId
-      );
-      
-      results.push({
-        hubspotId: template.id,
-        hubspotName: template.name,
-        sfmcId: result.id,
-        sfmcCustomerKey: result.customerKey,
-        status: 'success'
-      });
+    for (const template of templateToMigrate) {
+      try {
+        console.log(`Processing template: ${template.name} (ID: ${template.id})`);
+        
+        // Fetch the template content if not included
+        let templateContent = template.source || template.content;
+        
+        if (!templateContent && template.id) {
+          try {
+            // Try to fetch template content from HubSpot
+            const templateDetails = await axios.get(
+              `https://api.hubapi.com/cms/v3/design-manager/templates/${template.id}`, 
+              {
+                headers: {
+                  'Authorization': `Bearer ${hubspotAccessToken}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
+            templateContent = templateDetails.data.source;
+          } catch (error) {
+            console.error(`Error fetching template content for ${template.name}:`, error);
+            templateContent = `<p>Failed to fetch template content for ${template.name}</p>`;
+          }
+        }
+        
+        // Convert template to SFMC format
+        const convertedTemplate = convertHubspotTemplate({
+          ...template,
+          source: templateContent || `<p>Template: ${template.name}</p>`
+        });
+        
+        // Create template in SFMC
+        const result = await createEmailTemplate(
+          {
+            ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+            accessToken: sfmcAccessToken,
+          },
+          template.name,
+          convertedTemplate.content,
+          contentBuilderFolderId,
+          {
+            channels: convertedTemplate.channels,
+            slots: convertedTemplate.slots,
+            assetType: { name: 'template', id: 4 }
+          }
+        );
+        
+        results.push({
+          hubspotId: template.id,
+          hubspotName: template.name,
+          sfmcId: result.id,
+          sfmcCustomerKey: result.customerKey,
+          status: 'success'
+        });
+        
+        console.log(`Successfully migrated template: ${template.name}`);
+      } catch (error) {
+        console.error(`Error migrating template ${template.name}:`, error);
+        errors.push({
+          hubspotId: template.id,
+          hubspotName: template.name,
+          error: error instanceof Error ? error.message : String(error),
+          status: 'error'
+        });
+      }
     }
     
     // Return success response
     return NextResponse.json({
       success: true,
-      message: `Successfully migrated ${templates.length} templates`,
+      message: `Migrated ${results.length} templates successfully${errors.length > 0 ? `, with ${errors.length} errors` : ''}`,
       migrated: results,
-      templatesCount: templates.length
+      errors: errors.length > 0 ? errors : undefined,
+      templatesCount: results.length,
+      totalAttempted: templateToMigrate.length
     });
     
   } catch (error) {
     console.error('Error in templates migration:', error);
     return NextResponse.json(
-      { error: 'Failed to migrate email templates' },
+      { error: 'Failed to migrate email templates', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }

@@ -71,7 +71,7 @@ export const mapContactData = (
 
 // Convert HubSpot template to SFMC template format
 export const convertHubspotTemplate = (hubspotTemplate: Record<string, any>) => {
-  let content = hubspotTemplate.source;
+  let content = hubspotTemplate.source || hubspotTemplate.html || '';
   
   // Replace HubSpot personalization tokens with SFMC AMPscript
   content = content.replace(/\{\{contact\.([^}]+)\}\}/g, '%%=v(@$1)=%%');
@@ -82,7 +82,56 @@ export const convertHubspotTemplate = (hubspotTemplate: Record<string, any>) => 
     '%%[ IF $1 ]%%$2%%[ ENDIF ]%%'
   );
   
-  return content;
+  // Check if content contains data-type="slot" to identify if it's already compatible with SFMC slots
+  const hasSlots = content.includes('data-type="slot"');
+  
+  // If no slots found, add default template structure with slots
+  if (!hasSlots) {
+    content = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${hubspotTemplate.name || 'Migrated Template'}</title>
+  <style>
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    .content { padding: 20px; }
+  </style>
+</head>
+<body>
+  <div data-type="slot" data-key="header"></div>
+  <div class="content">
+    <div data-type="slot" data-key="content">${content}</div>
+  </div>
+  <div data-type="slot" data-key="footer"></div>
+</body>
+</html>`;
+  }
+  
+  // Extract slot definitions
+  const slotMatches = content.matchAll(/data-type="slot"\s+data-key="([^"]+)"/g);
+  const slots: Record<string, Record<string, never>> = {};
+  
+  for (const match of slotMatches) {
+    const slotKey = match[1];
+    slots[slotKey] = {};
+  }
+  
+  // If no slots found, add default ones
+  if (Object.keys(slots).length === 0) {
+    slots.cell1 = {};
+    slots.cell2 = {};
+    slots.cell3 = {};
+  }
+  
+  return {
+    content,
+    slots,
+    channels: {
+      email: true,
+      web: false
+    }
+  };
 };
 
 // Map HubSpot form to SFMC CloudPage form

@@ -186,7 +186,81 @@ export const createDataExtension = async (
 
     // Check for errors in the response
     const responseText = response.data.toString();
-    if (responseText.includes('<StatusCode>Error</StatusCode>')) {
+    
+    // Handle specific case of duplicate data extension
+    if (responseText.includes('<StatusCode>Error</StatusCode>') && 
+        (responseText.includes('already exists') || responseText.includes('310007'))) {
+      
+      console.log(`Data extension "${name}" already exists. Creating with unique name: ${customerKey}`);
+      
+      // If this is a duplicate name error, we can use the unique key we generated
+      // but we need to change the name as well to be unique
+      const uniqueName = `${name}_${uniqueSuffix}`;
+      
+      // Create modified SOAP content with unique name and key
+      const modifiedRequestContent = `
+        <CreateRequest xmlns="http://exacttarget.com/wsdl/partnerAPI">
+            <Options />
+            <Objects xsi:type="DataExtension">
+                <CustomerKey>${escapeXml(customerKey)}</CustomerKey>
+                <Name>${escapeXml(uniqueName)}</Name>
+                <IsSendable>true</IsSendable>
+                <SendableDataExtensionField>
+                    <Name>${escapeXml(sendableField.name)}</Name>
+                    <FieldType>${sendableField.fieldType || sendableField.type || 'Text'}</FieldType>
+                </SendableDataExtensionField>
+                <SendableSubscriberField>
+                    <Name>Subscriber Key</Name>
+                    <Value></Value>
+                </SendableSubscriberField>
+                <Fields>
+                    ${fieldElements}
+                </Fields>
+            </Objects>
+        </CreateRequest>`;
+        
+      // Create modified SOAP envelope
+      const modifiedSoapEnvelope = createSoapEnvelope('Create', modifiedRequestContent, endpoint, auth.accessToken);
+      
+      console.log('Retrying with unique Data Extension name and key:', uniqueName, customerKey);
+      
+      // Try again with the modified request
+      const retryResponse = await axios.post(
+        endpoint,
+        modifiedSoapEnvelope,
+        {
+          headers: {
+            'Content-Type': 'text/xml',
+            'SOAPAction': 'Create'
+          },
+        }
+      );
+      
+      const retryResponseText = retryResponse.data.toString();
+      console.log('SFMC SOAP Retry Response for Data Extension Creation:', retryResponseText);
+      
+      // Check if the retry succeeded
+      if (retryResponseText.includes('<StatusCode>Error</StatusCode>')) {
+        const errorMatch = retryResponseText.match(/<ErrorMessage>(.*?)<\/ErrorMessage>/);
+        const statusMessageMatch = retryResponseText.match(/<StatusMessage>(.*?)<\/StatusMessage>/);
+        const errorMessage = errorMatch ? errorMatch[1] : (statusMessageMatch ? statusMessageMatch[1] : 'Unknown error creating data extension');
+        throw new Error(`SFMC Error: ${errorMessage}`);
+      }
+      
+      // Extract the data extension key from the response
+      const customerKeyMatch = retryResponseText.match(/<CustomerKey>(.*?)<\/CustomerKey>/);
+      const returnedCustomerKey = customerKeyMatch ? customerKeyMatch[1] : customerKey;
+      
+      console.log('Created Data Extension with unique name and Key:', uniqueName, returnedCustomerKey);
+      
+      return {
+        success: true,
+        key: returnedCustomerKey,
+        customerKey: returnedCustomerKey,
+        name: uniqueName,
+        soap_response: retryResponseText
+      };
+    } else if (responseText.includes('<StatusCode>Error</StatusCode>')) {
       const errorMatch = responseText.match(/<ErrorMessage>(.*?)<\/ErrorMessage>/);
       const statusMessageMatch = responseText.match(/<StatusMessage>(.*?)<\/StatusMessage>/);
       const errorMessage = errorMatch ? errorMatch[1] : (statusMessageMatch ? statusMessageMatch[1] : 'Unknown error creating data extension');
@@ -396,22 +470,48 @@ export const createEmailTemplate = async (
   auth: SFMCAuth & { accessToken: string },
   name: string,
   content: string,
-  folderId: number
+  folderId: number,
+  options: {
+    channels?: { email?: boolean; web?: boolean };
+    slots?: Record<string, any>;
+    assetType?: { name?: string; id?: number };
+  } = {}
 ) => {
   try {
+    // Set default values
+    const channels = options.channels || { email: true, web: false };
+    const slots = options.slots || {};
+    const assetType = options.assetType || { name: 'htmlemail', id: 208 };
+    
+    // If assetType is "template", use id 4
+    if (assetType.name === 'template') {
+      assetType.id = 4;
+    }
+    
+    const requestBody: Record<string, any> = {
+      name,
+      content,
+      assetType,
+      category: {
+        id: folderId
+      }
+    };
+    
+    // Add channels if provided
+    if (channels) {
+      requestBody.channels = channels;
+    }
+    
+    // Add slots if provided
+    if (Object.keys(slots).length > 0) {
+      requestBody.slots = slots;
+    }
+    
+    console.log('Creating SFMC template with request body:', JSON.stringify(requestBody, null, 2));
+    
     const response = await axios.post(
       `https://${auth.subdomain}.rest.marketingcloudapis.com/asset/v1/content/assets`,
-      {
-        name,
-        content,
-        assetType: {
-          name: 'htmlemail',
-          id: 208
-        },
-        category: {
-          id: folderId
-        }
-      },
+      requestBody,
       {
         headers: {
           'Authorization': `Bearer ${auth.accessToken}`,
@@ -419,9 +519,15 @@ export const createEmailTemplate = async (
         },
       }
     );
+    
+    console.log('SFMC template creation response:', JSON.stringify(response.data, null, 2));
     return response.data;
   } catch (error: any) {
     console.error('Error creating SFMC Email Template:', error);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    }
     throw error;
   }
 };
