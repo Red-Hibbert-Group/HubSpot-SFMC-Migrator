@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
-import { getHubspotMarketingEmails, getHubspotEmailDetails } from '@/app/lib/hubspot';
+import { getHubspotMarketingEmails, getHubspotEmailDetails, getHubspotRenderedEmailContent } from '@/app/lib/hubspot';
 import { createSFMCEmail, getSFMCToken, getSFMCFolders, createSFMCFolder } from '@/app/lib/sfmc';
 import { getIntegrationTokens } from '@/app/supabase/client';
 import { convertHubspotEmail } from '@/app/utils/migrationUtils';
@@ -432,6 +432,26 @@ export async function POST(request: Request) {
               // Log the first 100 characters to verify content
               if (emailDetails.emailBody.length > 0) {
                 console.log(`Content preview: ${emailDetails.emailBody.substring(0, 100).replace(/\n/g, '').trim()}...`);
+                
+                // Check if content has placeholders that need to be resolved
+                if (emailDetails.emailBody.includes('{% content_attribute') || 
+                    emailDetails.emailBody.includes('{{ default_email_body }}')) {
+                  console.log('Detected placeholder in content. Fetching rendered version from preview endpoint...');
+                  
+                  try {
+                    // Get fully rendered content using the preview endpoint
+                    const renderedContent = await getHubspotRenderedEmailContent(hubspotAccessToken, email.id);
+                    
+                    // Add it to the details object for the converter to use
+                    emailDetails.renderedContent = renderedContent;
+                    
+                    console.log(`Successfully fetched rendered content (${renderedContent.length} chars)`);
+                    console.log(`Rendered content preview: ${renderedContent.substring(0, 100).replace(/\n/g, '').trim()}...`);
+                  } catch (previewError: any) {
+                    console.warn(`Failed to get rendered content: ${previewError.message}`);
+                    // Continue with original content as fallback
+                  }
+                }
               }
             } else {
               console.warn('No emailBody field found in the response');
@@ -483,6 +503,35 @@ export async function POST(request: Request) {
         
         // Convert HubSpot email to SFMC format
         const convertedEmail = convertHubspotEmail(email, emailDetails);
+        
+        // If content still has placeholders (convertedEmail.content), make one final attempt
+        if (convertedEmail.content.includes('{% content_attribute') || 
+            convertedEmail.content.includes('{{ default_email_body }}')) {
+          console.log('Content still contains placeholders after conversion. Making one last attempt to get rendered content...');
+          
+          try {
+            // Last attempt to get fully rendered content
+            const renderedContent = await getHubspotRenderedEmailContent(hubspotAccessToken, email.id);
+            
+            // Replace the content directly
+            convertedEmail.content = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              ${renderedContent}
+            </div>`;
+            
+            console.log('Successfully replaced content with rendered version');
+          } catch (finalError: any) {
+            console.warn(`Final attempt to get rendered content failed: ${finalError.message}`);
+            
+            // If we still have placeholders, replace with a simple message as last resort
+            convertedEmail.content = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <p>This is a migrated email from HubSpot: ${convertedEmail.name}</p>
+              <p>Original subject: ${convertedEmail.subject}</p>
+              <p><em>Note: The original email content could not be rendered.</em></p>
+            </div>`;
+          }
+        }
         
         // Create email in SFMC
         const result = await createSFMCEmail(

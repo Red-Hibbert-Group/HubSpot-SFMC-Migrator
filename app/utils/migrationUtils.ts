@@ -174,13 +174,20 @@ export const convertHubspotEmail = (
   if (emailDetails) {
     console.log(`Looking for content in email details for ${emailName}`);
     
+    // Check for fully rendered content from preview endpoint
+    if (emailDetails.renderedContent && typeof emailDetails.renderedContent === 'string') {
+      emailContent = emailDetails.renderedContent;
+      console.log(`Using previously rendered content (${emailContent.length} characters)`);
+    }
     // If emailBody exists, use it as the primary source (this is the most reliable field)
-    if (emailDetails.emailBody && typeof emailDetails.emailBody === 'string') {
+    else if (emailDetails.emailBody && typeof emailDetails.emailBody === 'string') {
       emailContent = emailDetails.emailBody;
       console.log(`Found content in 'emailBody' property (${emailContent.length} characters)`);
       
-      // Check if the content seems like valid HTML content
-      if (emailContent.includes('<html') || emailContent.includes('<body') || 
+      // Check if the content seems like valid HTML content vs placeholders
+      if (emailContent.includes('{% content_attribute') || emailContent.includes('{{ default_email_body }}')) {
+        console.warn('Warning: emailBody contains placeholders that should be resolved');
+      } else if (emailContent.includes('<html') || emailContent.includes('<body') || 
           emailContent.includes('<div') || emailContent.includes('<p>')) {
         console.log('Content appears to be valid HTML');
       } else {

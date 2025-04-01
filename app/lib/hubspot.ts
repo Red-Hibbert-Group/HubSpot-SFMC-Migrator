@@ -293,4 +293,40 @@ export const getHubspotWorkflows = async (client: Client) => {
     console.error('Error fetching HubSpot workflows:', error);
     throw error;
   }
+};
+
+// Get rendered content for a marketing email (resolves placeholders like default_email_body)
+export const getHubspotRenderedEmailContent = async (accessToken: string, emailId: string) => {
+  try {
+    console.log(`Fetching rendered content for email ID ${emailId} using preview endpoint`);
+    const previewUrl = `https://api.hubapi.com/marketing-emails/v1/emails/${emailId}/preview`;
+    
+    // Try the preview endpoint which resolves placeholders
+    const response = await axios.post(previewUrl, {}, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    // The preview endpoint returns an object with 'html' containing the fully rendered content
+    if (response.data && response.data.html) {
+      console.log(`Successfully retrieved rendered HTML content, length: ${response.data.html.length} characters`);
+      
+      // Quick check to make sure we don't still have placeholders
+      if (response.data.html.includes('{% content_attribute')) {
+        console.warn('Warning: Rendered content still contains placeholders!');
+      } else {
+        console.log('Rendered content appears to be properly resolved (no placeholders detected)');
+      }
+      
+      return response.data.html;
+    } else {
+      console.warn('Preview endpoint response did not contain HTML content');
+      throw new Error('Preview endpoint did not return expected HTML content');
+    }
+  } catch (error: any) {
+    console.error(`Error fetching rendered email content for ID ${emailId}:`, error.message);
+    throw error;
+  }
 }; 
