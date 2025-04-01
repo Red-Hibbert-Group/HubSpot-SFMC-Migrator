@@ -221,9 +221,9 @@ function DashboardContent() {
     
     console.log(`Starting migration for module: ${module}, current status: ${migrationStatus[module]}`);
     
-    // For templates module, prompt for folder ID if it's a new migration and no folder ID entered
-    if (module === 'templates' && migrationStatus[module] === 'idle' && !folderIdInput) {
-      console.log('Opening folder selection modal for templates migration');
+    // For templates or emails module, prompt for folder ID if it's a new migration and no folder ID entered
+    if ((module === 'templates' || module === 'emails') && migrationStatus[module] === 'idle' && !folderIdInput) {
+      console.log(`Opening folder selection modal for ${module} migration`);
       setMigrationModule(module);
       setShowFolderModal(true);
       return;
@@ -244,8 +244,8 @@ function DashboardContent() {
         limit: 100
       };
       
-      // Add folder ID for templates
-      if (module === 'templates') {
+      // Add folder ID for templates or emails
+      if (module === 'templates' || module === 'emails') {
         if (folderIdInput && folderIdInput.trim()) {
           try {
             const folderId = parseInt(folderIdInput.trim(), 10);
@@ -253,7 +253,7 @@ function DashboardContent() {
               throw new Error(`Invalid folder ID: ${folderIdInput}`);
             }
             requestData.folderId = folderId;
-            console.log(`Using folder ID: ${folderId} for templates migration`);
+            console.log(`Using folder ID: ${folderId} for ${module} migration`);
           } catch (error) {
             console.error(`Error parsing folder ID: ${folderIdInput}`, error);
             alert(`Invalid folder ID: ${folderIdInput}. Please enter a valid number.`);
@@ -264,7 +264,7 @@ function DashboardContent() {
             return;
           }
         } else {
-          console.log('No folder ID provided, will auto-create a folder');
+          console.log(`No folder ID provided for ${module}, will auto-create a folder`);
         }
       }
 
@@ -823,109 +823,70 @@ function DashboardContent() {
       {showFolderModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Enter Folder ID</h3>
-            <div className="space-y-4">
-              <div>
+            <h3 className="text-lg font-semibold mb-4">Select SFMC Folder for {migrationModule}</h3>
+            <form onSubmit={handleFolderIdSubmit}>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Folder ID
                 </label>
                 <input
                   type="text"
-                  name="folderId"
                   value={folderIdInput}
-                  onChange={(e) => setFolderIdInput(e.target.value)}
+                  onChange={e => setFolderIdInput(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="Enter folder ID"
+                  placeholder="Enter folder ID, e.g. 13172"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Leave empty to automatically create a "HubSpot Templates" folder
+                <p className="mt-1 text-sm text-gray-500">
+                  The numeric ID of the folder in SFMC where content will be created.
                 </p>
               </div>
               
-              <div>
-                <div className="flex justify-between items-center">
-                  <label className="block text-sm font-medium text-gray-700">
-                    SFMC Folders
-                  </label>
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Common Folder IDs:</h4>
+                <div className="grid grid-cols-1 gap-2">
                   <button
                     type="button"
-                    onClick={getSFMCFolders}
-                    disabled={loadingFolders}
-                    className="text-sm text-blue-600 hover:text-blue-500"
+                    onClick={() => setFolderIdInput('13172')}
+                    className="text-left px-3 py-2 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
                   >
-                    {loadingFolders ? 'Loading...' : 'Refresh Folders'}
+                    13172 - Content Builder (Root)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFolderIdInput('32504')}
+                    className="text-left px-3 py-2 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
+                  >
+                    32504 - Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFolderIdInput('32505')}
+                    className="text-left px-3 py-2 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
+                  >
+                    32505 - Templates
                   </button>
                 </div>
-                
-                {folders.length > 0 ? (
-                  <div className="mt-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {folders.map((folder) => (
-                          <tr key={folder.id}>
-                            <td className="px-3 py-2 text-xs text-gray-500">{folder.name}</td>
-                            <td className="px-3 py-2 text-xs text-gray-500">{folder.id}</td>
-                            <td className="px-3 py-2 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => setFolderIdInput(folder.id.toString())}
-                                className="text-blue-600 hover:text-blue-500"
-                              >
-                                Select
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {loadingFolders ? 'Loading folders...' : 'Click "Refresh Folders" to view available folders'}
-                  </p>
-                )}
               </div>
-            </div>
-            <div className="mt-6 flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowFolderModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  console.log(`Starting direct migration for ${migrationModule} with folder ID: ${folderIdInput}`);
-                  
-                  // Show confirmation to help with debugging
-                  const confirmation = folderIdInput 
-                    ? `Starting migration with folder ID: ${folderIdInput}` 
-                    : 'No folder ID provided. A folder will be created automatically.';
-                  
-                  // Confirm with an alert that will force the user to interact
-                  if (window.confirm(confirmation + '\n\nAre you sure you want to proceed?')) {
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
                     setShowFolderModal(false);
-                    
-                    // Use a small delay to ensure modal is closed before starting migration
-                    setTimeout(() => {
-                      startMigration(migrationModule);
-                    }, 100);
-                  }
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-              >
-                Start Migration
-              </button>
-            </div>
+                    setFolderIdInput('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                >
+                  Continue
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -108,42 +108,97 @@ export async function POST(request: Request) {
           accessToken: sfmcAccessToken,
         });
         
+        console.log(`Found ${foldersResponse.items.length} folders in SFMC`);
+        
         // Find root content builder folder
         const contentBuilderFolder = foldersResponse.items.find((folder: any) => 
           folder.name === 'Content Builder'
         );
         
         if (!contentBuilderFolder) {
-          throw new Error('Content Builder folder not found');
-        }
-        
-        // Find or create a "HubSpot Emails" folder
-        const hubspotFolder = foldersResponse.items.find((folder: any) => 
-          folder.name === 'HubSpot Emails' && 
-          folder.parentId === contentBuilderFolder.id
-        );
-        
-        if (hubspotFolder) {
-          contentBuilderFolderId = hubspotFolder.id;
-          console.log(`Found existing HubSpot Emails folder with ID: ${contentBuilderFolderId}`);
-        } else {
-          // Create a new folder
-          const newFolder = await createSFMCFolder(
-            {
-              ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
-              accessToken: sfmcAccessToken,
-            },
-            'HubSpot Emails',
-            contentBuilderFolder.id
+          console.log('Content Builder folder not found, using hardcoded default of 13172');
+          // Fallback to common default Content Builder ID
+          const contentBuilderId = 13172;
+          
+          // Try to find the HubSpot Emails folder directly
+          const hubspotFolder = foldersResponse.items.find((folder: any) => 
+            folder.name.toLowerCase() === 'hubspot emails' && 
+            folder.parentId === contentBuilderId
           );
           
-          contentBuilderFolderId = newFolder.id;
-          console.log(`Created new HubSpot Emails folder with ID: ${contentBuilderFolderId}`);
+          if (hubspotFolder) {
+            contentBuilderFolderId = hubspotFolder.id;
+            console.log(`Found existing HubSpot Emails folder with ID: ${contentBuilderFolderId}`);
+          } else {
+            // Fall back to using the root Content Builder folder
+            contentBuilderFolderId = contentBuilderId;
+            console.log(`Using root Content Builder folder with ID: ${contentBuilderFolderId}`);
+          }
+        } else {
+          // Normal path - using found Content Builder folder
+          const contentBuilderId = contentBuilderFolder.id;
+          console.log(`Found Content Builder folder with ID: ${contentBuilderId}`);
+          
+          // Find HubSpot Emails folder (case insensitive search)
+          const hubspotFolder = foldersResponse.items.find((folder: any) => 
+            folder.name.toLowerCase() === 'hubspot emails' && 
+            folder.parentId === contentBuilderId
+          );
+          
+          if (hubspotFolder) {
+            contentBuilderFolderId = hubspotFolder.id;
+            console.log(`Found existing HubSpot Emails folder with ID: ${contentBuilderFolderId}`);
+          } else {
+            try {
+              // Create a new folder - wrap this in its own try/catch to handle existing folder error
+              const newFolder = await createSFMCFolder(
+                {
+                  ...{ clientId: sfmcCredentials?.clientId, clientSecret: sfmcCredentials?.clientSecret, subdomain: sfmcCredentials?.subdomain },
+                  accessToken: sfmcAccessToken,
+                },
+                'HubSpot Emails',
+                contentBuilderId
+              );
+              
+              contentBuilderFolderId = newFolder.id;
+              console.log(`Created new HubSpot Emails folder with ID: ${contentBuilderFolderId}`);
+            } catch (folderError: any) {
+              console.warn(`Folder creation error: ${folderError.message}`);
+              
+              // Check if it's a "folder already exists" error
+              if (folderError.response?.data?.message?.includes('Category already exists')) {
+                // If it's because folder already exists, search again
+                console.log('Folder already exists, searching again with all folders');
+                
+                // Look through all folders for any HubSpot Emails folder
+                const existingFolder = foldersResponse.items.find((folder: any) =>
+                  folder.name.toLowerCase() === 'hubspot emails'
+                );
+                
+                if (existingFolder) {
+                  contentBuilderFolderId = existingFolder.id;
+                  console.log(`Found existing HubSpot Emails folder with ID: ${contentBuilderFolderId}`);
+                } else {
+                  // Last resort, use the Content Builder root folder
+                  contentBuilderFolderId = contentBuilderId;
+                  console.log(`Using Content Builder root folder with ID: ${contentBuilderId}`);
+                }
+              } else {
+                // For any other error, use Content Builder folder
+                contentBuilderFolderId = contentBuilderId;
+                console.log(`Using Content Builder root folder with ID: ${contentBuilderId} due to error`);
+              }
+            }
+          }
         }
       } catch (error) {
         console.error('Error finding/creating SFMC folder:', error);
         return NextResponse.json(
-          { error: 'Failed to find or create a folder in SFMC. Please provide a valid folderId.' },
+          { 
+            error: 'Failed to find or create a folder in SFMC. Please provide a valid folderId.',
+            details: `We recommend trying again with a specific folderId in the request, such as 13172 (default Content Builder folder).`,
+            possibleFolderIds: '13172 (Content Builder), 32504 (Email folder), 32505 (Templates folder)'
+          },
           { status: 400 }
         );
       }
