@@ -408,54 +408,76 @@ export async function POST(request: Request) {
         // Get detailed email content if available
         let emailDetails = null;
         try {
-          // Need to append includeContent=true to get the HTML content
-          console.log(`Retrieving detailed content for email ID ${email.id}`);
-          emailDetails = await getHubspotEmailDetails(hubspotAccessToken, email.id);
+          // First attempt: Use the marketing-emails/v1/emails/{emailId} endpoint to get full email details
+          console.log(`Retrieving email details for ID ${email.id} from primary endpoint`);
           
-          // Debug the email details structure to help with debugging
-          console.log(`Email details structure:`, 
-            `Keys: ${emailDetails ? Object.keys(emailDetails).join(', ') : 'No details found'}`);
-          
-          // Check for content-related fields
-          const contentFields = [
-            'htmlBody', 'content', 'body', 'html', 'design', 'emailBody', 'emailContent',
-            'tsPrettyHtml', 'tsHtml', 'cleanedHtml', 'originalHtml', 'body.value'
-          ];
-          
-          for (const field of contentFields) {
-            if (getNestedProperty(emailDetails, field)) {
-              console.log(`Found content in '${field}' property`);
-              break;
-            }
-          }
-          
-          // If we still can't find content, try another approach specifically for the HTML content
-          if (!emailDetails.htmlBody && 
-              !emailDetails.content && 
-              !emailDetails.body && 
-              !emailDetails.html) {
-            console.log(`No HTML content found in normal fields, trying additional API call`);
+          try {
+            const detailsResponse = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${email.id}`, {
+              headers: {
+                Authorization: `Bearer ${hubspotAccessToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
             
+            emailDetails = detailsResponse.data;
+            
+            // Debug the email details structure
+            console.log(`Email details retrieved successfully with ${Object.keys(emailDetails).length} fields`);
+            console.log(`Fields include: ${Object.keys(emailDetails).includes('emailBody') ? 'emailBody √' : 'emailBody ✘'}, ${Object.keys(emailDetails).includes('subject') ? 'subject √' : 'subject ✘'}`);
+            
+            // Check if we have the emailBody content
+            if (emailDetails.emailBody) {
+              console.log(`Successfully retrieved HTML content, length: ${emailDetails.emailBody.length} characters`);
+              
+              // Log the first 100 characters to verify content
+              if (emailDetails.emailBody.length > 0) {
+                console.log(`Content preview: ${emailDetails.emailBody.substring(0, 100).replace(/\n/g, '').trim()}...`);
+              }
+            } else {
+              console.warn('No emailBody field found in the response');
+              
+              // Try alternative approaches for content
+              // If we still can't find content, try another approach specifically for the HTML content
+              console.log(`Trying additional API call for HTML content`);
+              
+              try {
+                // Try to get the content directly from the HTML endpoint
+                const contentResponse = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${email.id}/html`, {
+                  headers: {
+                    Authorization: `Bearer ${hubspotAccessToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (contentResponse.data) {
+                  console.log(`Retrieved HTML content directly, length: ${contentResponse.data.length} characters`);
+                  // Add the HTML content to the email details
+                  emailDetails.htmlBody = contentResponse.data;
+                }
+              } catch (htmlError: any) {
+                console.warn(`Could not retrieve HTML content: ${htmlError.message}`);
+              }
+            }
+          } catch (primaryError: any) {
+            console.warn(`Primary endpoint failed: ${primaryError.message}, trying fallback with includeContent parameter`);
+            
+            // Second attempt: Try with includeContent parameter
             try {
-              // Try to get the content directly
-              const contentResponse = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${email.id}/html`, {
+              const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${email.id}?includeContent=true`, {
                 headers: {
                   Authorization: `Bearer ${hubspotAccessToken}`,
                   'Content-Type': 'application/json'
                 }
               });
               
-              if (contentResponse.data) {
-                console.log(`Retrieved HTML content directly`);
-                // Add the HTML content to the email details
-                emailDetails.htmlBody = contentResponse.data;
-              }
-            } catch (htmlError: any) {
-              console.warn(`Could not retrieve HTML content: ${htmlError.message}`);
+              emailDetails = response.data;
+              console.log(`Retrieved email details with includeContent parameter`);
+            } catch (detailsError: any) {
+              console.warn(`Could not retrieve detailed content for email ID ${email.id}:`, detailsError.message);
             }
           }
-        } catch (detailsError: any) {
-          console.warn(`Could not retrieve detailed content for email ID ${email.id}:`, detailsError.message);
+        } catch (outerError: any) {
+          console.warn(`All attempts to get email details failed: ${outerError.message}`);
           // Continue with basic info only
         }
         

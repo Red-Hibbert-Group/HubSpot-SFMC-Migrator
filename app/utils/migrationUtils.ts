@@ -174,32 +174,48 @@ export const convertHubspotEmail = (
   if (emailDetails) {
     console.log(`Looking for content in email details for ${emailName}`);
     
-    // Direct content fields in order of preference
-    const contentFields = [
-      'html', 'htmlBody', 'content', 'body', 'design', 
-      'tsPrettyHtml', 'tsHtml', 'cleanedHtml', 'originalHtml'
-    ];
-    
-    // Try each field
-    for (const field of contentFields) {
-      if (emailDetails[field] && typeof emailDetails[field] === 'string') {
-        emailContent = emailDetails[field];
-        console.log(`Found content in '${field}' property`);
-        break;
+    // If emailBody exists, use it as the primary source (this is the most reliable field)
+    if (emailDetails.emailBody && typeof emailDetails.emailBody === 'string') {
+      emailContent = emailDetails.emailBody;
+      console.log(`Found content in 'emailBody' property (${emailContent.length} characters)`);
+      
+      // Check if the content seems like valid HTML content
+      if (emailContent.includes('<html') || emailContent.includes('<body') || 
+          emailContent.includes('<div') || emailContent.includes('<p>')) {
+        console.log('Content appears to be valid HTML');
+      } else {
+        console.log('Content may not be valid HTML, but using it anyway');
       }
     }
-    
-    // Check nested properties
-    if (!emailContent) {
-      if (emailDetails.body && emailDetails.body.value) {
-        emailContent = emailDetails.body.value;
-        console.log(`Found content in 'body.value' property`);
-      } else if (emailDetails.content && emailDetails.content.html) {
-        emailContent = emailDetails.content.html;
-        console.log(`Found content in 'content.html' property`);
-      } else if (emailDetails.email && emailDetails.email.body) {
-        emailContent = emailDetails.email.body;
-        console.log(`Found content in 'email.body' property`);
+    // If still no content, try other potential fields in order of preference
+    else {
+      // Direct content fields in order of preference
+      const contentFields = [
+        'html', 'htmlBody', 'content', 'body', 'design', 
+        'tsPrettyHtml', 'tsHtml', 'cleanedHtml', 'originalHtml'
+      ];
+      
+      // Try each field
+      for (const field of contentFields) {
+        if (emailDetails[field] && typeof emailDetails[field] === 'string') {
+          emailContent = emailDetails[field];
+          console.log(`Found content in '${field}' property`);
+          break;
+        }
+      }
+      
+      // Check nested properties
+      if (!emailContent) {
+        if (emailDetails.body && emailDetails.body.value) {
+          emailContent = emailDetails.body.value;
+          console.log(`Found content in 'body.value' property`);
+        } else if (emailDetails.content && emailDetails.content.html) {
+          emailContent = emailDetails.content.html;
+          console.log(`Found content in 'content.html' property`);
+        } else if (emailDetails.email && emailDetails.email.body) {
+          emailContent = emailDetails.email.body;
+          console.log(`Found content in 'email.body' property`);
+        }
       }
     }
     

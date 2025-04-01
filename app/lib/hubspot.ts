@@ -201,21 +201,9 @@ export const getHubspotMarketingEmails = async (accessToken: string, limit = 100
 // Get details for a specific marketing email
 export const getHubspotEmailDetails = async (accessToken: string, emailId: string) => {
   try {
-    // First try to get all details including content
+    // First try the standard endpoint without any parameters
     try {
-      const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}?includeContent=true`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log(`Retrieved email details with content for ID ${emailId}`);
-      return response.data;
-    } catch (contentError) {
-      console.warn(`Error getting email with content: ${contentError.message}, trying without content parameter`);
-      
-      // Fallback to request without content parameter
+      console.log(`Fetching email details from primary endpoint for ID ${emailId}`);
       const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -223,14 +211,56 @@ export const getHubspotEmailDetails = async (accessToken: string, emailId: strin
         }
       });
       
+      // Check if we have emailBody content
+      if (response.data && response.data.emailBody) {
+        console.log(`Email details successfully retrieved with emailBody content (${response.data.emailBody.length} characters)`);
+      } else {
+        console.log(`Email details retrieved but no emailBody content found, will try alternative endpoints`);
+      }
+      
       return response.data;
+    } catch (primaryError: any) {
+      console.warn(`Error with primary endpoint: ${primaryError.message}, trying with includeContent parameter`);
+      
+      // Try with includeContent parameter as fallback
+      try {
+        const response = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}?includeContent=true`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log(`Retrieved email details with includeContent parameter`);
+        return response.data;
+      } catch (contentError: any) {
+        console.warn(`Error with includeContent parameter: ${contentError.message}, trying HTML endpoint`);
+        
+        // Try the dedicated HTML endpoint as last resort
+        try {
+          const htmlResponse = await axios.get(`https://api.hubapi.com/marketing-emails/v1/emails/${emailId}/html`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          // Create a minimal details object with the HTML content
+          return {
+            id: emailId,
+            htmlBody: htmlResponse.data,
+            name: 'Email ' + emailId,
+            // Add minimal fields needed for conversion
+            subject: 'Email ' + emailId
+          };
+        } catch (htmlError: any) {
+          console.error(`All email content retrieval methods failed for ID ${emailId}`);
+          throw new Error(`Could not retrieve email content through any available method: ${htmlError.message}`);
+        }
+      }
     }
-  } catch (error) {
-    console.error(`Error fetching details for email ID ${emailId}:`, error);
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
-    }
+  } catch (error: any) {
+    console.error(`Error fetching details for email ID ${emailId}:`, error.message);
     throw error;
   }
 };
