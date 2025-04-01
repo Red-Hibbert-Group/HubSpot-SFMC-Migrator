@@ -156,7 +156,8 @@ export const getHubspotMarketingEmails = async (accessToken: string, limit = 100
     // Set a default start timestamp of 1 year ago (required parameter for the API)
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const startTimestamp = Math.floor(oneYearAgo.getTime());
+    // Format as ISO string and then take only the date part (YYYY-MM-DD)
+    const startTimestamp = oneYearAgo.toISOString().split('T')[0];
     
     // Build URL with required parameters
     let url = `https://api.hubapi.com/marketing/v3/emails/statistics/list?limit=${limit}&startTimestamp=${startTimestamp}`;

@@ -226,8 +226,34 @@ export async function POST(request: Request) {
             }
           });
           
-          // Process the response from legacy API
-          marketingEmails = response.data || [];
+          console.log('Legacy API response structure:', 
+            `Type: ${typeof response.data}, ` +
+            `Keys: ${typeof response.data === 'object' ? Object.keys(response.data).join(', ') : 'N/A'}`
+          );
+          
+          // Process the response from legacy API - ensure it's an array
+          if (Array.isArray(response.data)) {
+            marketingEmails = response.data;
+          } else if (response.data && Array.isArray(response.data.objects)) {
+            marketingEmails = response.data.objects;
+          } else if (response.data && typeof response.data === 'object') {
+            // If it's an object with any array property, try to use that
+            const possibleArrayProps = Object.keys(response.data).filter(key => 
+              Array.isArray(response.data[key]) && response.data[key].length > 0
+            );
+            
+            if (possibleArrayProps.length > 0) {
+              // Use the first array property found
+              marketingEmails = response.data[possibleArrayProps[0]];
+            } else {
+              // Last resort - create an array with this single object if it has an id
+              marketingEmails = response.data.id ? [response.data] : [];
+            }
+          } else {
+            // Fallback to empty array if we can't find anything usable
+            marketingEmails = [];
+          }
+          
           console.log(`Retrieved ${marketingEmails.length} marketing emails from legacy API`);
         } catch (legacyError: any) {
           console.error('Legacy email API failed:', legacyError.message);
@@ -243,14 +269,36 @@ export async function POST(request: Request) {
             });
             
             // Process campaigns which contain email data
-            const campaigns = campaignsResponse.data?.campaigns || campaignsResponse.data || [];
+            let campaigns = [];
+            
+            if (campaignsResponse.data && Array.isArray(campaignsResponse.data.campaigns)) {
+              campaigns = campaignsResponse.data.campaigns;
+            } else if (campaignsResponse.data && Array.isArray(campaignsResponse.data)) {
+              campaigns = campaignsResponse.data;
+            } else if (campaignsResponse.data && typeof campaignsResponse.data === 'object') {
+              // Look for any array property
+              const possibleArrayProps = Object.keys(campaignsResponse.data).filter(key => 
+                Array.isArray(campaignsResponse.data[key]) && campaignsResponse.data[key].length > 0
+              );
+              
+              if (possibleArrayProps.length > 0) {
+                campaigns = campaignsResponse.data[possibleArrayProps[0]];
+              } else {
+                // Create single-item array if it has an id
+                campaigns = campaignsResponse.data.id ? [campaignsResponse.data] : [];
+              }
+            } else {
+              campaigns = [];
+            }
+            
+            // Map the campaigns to a consistent format
             marketingEmails = campaigns.map((campaign: any) => ({
-              id: campaign.id || campaign.campaignId,
-              name: campaign.name,
-              subject: campaign.subject,
+              id: campaign.id || campaign.campaignId || `campaign-${Date.now()}`,
+              name: campaign.name || campaign.subject || 'Unnamed Campaign',
+              subject: campaign.subject || campaign.name || 'No Subject',
               type: 'EMAIL',
-              createdAt: campaign.lastUpdatedTime,
-              updatedAt: campaign.lastUpdatedTime,
+              createdAt: campaign.lastUpdatedTime || campaign.createdAt || new Date().toISOString(),
+              updatedAt: campaign.lastUpdatedTime || campaign.updatedAt || new Date().toISOString(),
               state: campaign.isPublished ? 'PUBLISHED' : 'DRAFT',
               // Add any other fields needed
             }));
@@ -258,7 +306,37 @@ export async function POST(request: Request) {
             console.log(`Retrieved ${marketingEmails.length} emails from campaigns API`);
           } catch (campaignsError: any) {
             console.error('All email APIs failed:', campaignsError.message);
-            throw new Error('Failed to fetch marketing emails from all available HubSpot APIs');
+            
+            // Last-ditch attempt: Try marketing-emails/v1/emails with the includeContent=true parameter
+            try {
+              console.log('Trying final fallback: v1/emails with includeContent parameter');
+              const detailedResponse = await axios.get('https://api.hubapi.com/marketing-emails/v1/emails?includeContent=true', {
+                headers: {
+                  'Authorization': `Bearer ${hubspotAccessToken}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              console.log('Detailed emails API response structure:', 
+                `Type: ${typeof detailedResponse.data}, ` +
+                `Keys: ${typeof detailedResponse.data === 'object' ? Object.keys(detailedResponse.data).join(', ') : 'N/A'}`
+              );
+              
+              // Process detailed response
+              if (Array.isArray(detailedResponse.data)) {
+                marketingEmails = detailedResponse.data;
+              } else if (detailedResponse.data && Array.isArray(detailedResponse.data.objects)) {
+                marketingEmails = detailedResponse.data.objects;
+              } else {
+                // If still not successful, give up
+                throw new Error('Could not retrieve emails from any HubSpot API');
+              }
+              
+              console.log(`Retrieved ${marketingEmails.length} emails from detailed emails API`);
+            } catch (finalError: any) {
+              console.error('All HubSpot email API attempts failed. Final error:', finalError.message);
+              throw new Error('Failed to fetch marketing emails from all available HubSpot APIs');
+            }
           }
         }
       }
@@ -283,13 +361,19 @@ export async function POST(request: Request) {
     }
     
     // If no emails found
-    if (marketingEmails.length === 0) {
+    if (!marketingEmails || marketingEmails.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No marketing emails found in HubSpot',
         migrated: [],
         emailsCount: 0
       });
+    }
+    
+    // Ensure marketingEmails is an array before using slice
+    if (!Array.isArray(marketingEmails)) {
+      console.warn('marketingEmails is not an array, converting to empty array');
+      marketingEmails = [];
     }
     
     // Limit the number of emails to migrate
