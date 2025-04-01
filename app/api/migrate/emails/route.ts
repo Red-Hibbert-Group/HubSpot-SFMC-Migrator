@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
-import { getHubspotMarketingEmails, getHubspotEmailDetails, getHubspotRenderedEmailContent } from '@/app/lib/hubspot';
+import { 
+  getHubspotMarketingEmails, 
+  getHubspotEmailDetails, 
+  getHubspotRenderedEmailContent,
+  getHubspotEmailEditorContent,
+  resolveHubspotDefaultContent 
+} from '@/app/lib/hubspot';
 import { createSFMCEmail, getSFMCToken, getSFMCFolders, createSFMCFolder } from '@/app/lib/sfmc';
 import { getIntegrationTokens } from '@/app/supabase/client';
 import { convertHubspotEmail } from '@/app/utils/migrationUtils';
@@ -436,20 +442,68 @@ export async function POST(request: Request) {
                 // Check if content has placeholders that need to be resolved
                 if (emailDetails.emailBody.includes('{% content_attribute') || 
                     emailDetails.emailBody.includes('{{ default_email_body }}')) {
-                  console.log('Detected placeholder in content. Fetching rendered version from preview endpoint...');
+                  console.log('Detected placeholder in content. Trying multiple methods to resolve content...');
+                  let resolvedContent = '';
                   
+                  // Method 1: Try the preview endpoint (though logs show this fails with 404)
                   try {
-                    // Get fully rendered content using the preview endpoint
-                    const renderedContent = await getHubspotRenderedEmailContent(hubspotAccessToken, email.id);
-                    
-                    // Add it to the details object for the converter to use
-                    emailDetails.renderedContent = renderedContent;
-                    
-                    console.log(`Successfully fetched rendered content (${renderedContent.length} chars)`);
-                    console.log(`Rendered content preview: ${renderedContent.substring(0, 100).replace(/\n/g, '').trim()}...`);
+                    console.log('Attempt 1: Using preview endpoint...');
+                    resolvedContent = await getHubspotRenderedEmailContent(hubspotAccessToken, email.id);
+                    console.log(`Preview endpoint successful (${resolvedContent.length} chars)`);
                   } catch (previewError: any) {
-                    console.warn(`Failed to get rendered content: ${previewError.message}`);
-                    // Continue with original content as fallback
+                    console.warn(`Preview endpoint failed: ${previewError.message}`);
+                    
+                    // Method 2: Try the Editor API
+                    try {
+                      console.log('Attempt 2: Using Editor API...');
+                      const editorContent = await getHubspotEmailEditorContent(hubspotAccessToken, email.id);
+                      if (editorContent && editorContent.length > 0) {
+                        resolvedContent = editorContent;
+                        console.log(`Editor API successful (${resolvedContent.length} chars)`);
+                      } else {
+                        console.warn('Editor API returned empty content');
+                        
+                        // Method 3: Try to get default content
+                        console.log('Attempt 3: Fetching default content...');
+                        const defaultContent = await resolveHubspotDefaultContent(hubspotAccessToken, email.id);
+                        if (defaultContent && defaultContent.length > 0) {
+                          resolvedContent = defaultContent;
+                          console.log(`Default content successful (${resolvedContent.length} chars)`);
+                        } else {
+                          console.warn('Default content also failed');
+                        }
+                      }
+                    } catch (editorError: any) {
+                      console.warn(`Editor API failed: ${editorError.message}`);
+                      
+                      // Still try Method 3 if Method 2 fails
+                      try {
+                        console.log('Attempt 3: Fetching default content...');
+                        const defaultContent = await resolveHubspotDefaultContent(hubspotAccessToken, email.id);
+                        if (defaultContent && defaultContent.length > 0) {
+                          resolvedContent = defaultContent;
+                          console.log(`Default content successful (${resolvedContent.length} chars)`);
+                        } else {
+                          console.warn('Default content also failed');
+                        }
+                      } catch (defaultsError: any) {
+                        console.warn(`Default content fetch failed: ${defaultsError.message}`);
+                      }
+                    }
+                  }
+                  
+                  // If we successfully resolved the content, use it
+                  if (resolvedContent && resolvedContent.length > 0) {
+                    emailDetails.renderedContent = resolvedContent;
+                    console.log(`Successfully resolved content using one of the methods`);
+                    
+                    // Check if resolved content still has placeholders
+                    if (resolvedContent.includes('{% content_attribute') || 
+                        resolvedContent.includes('{{ default_email_body }}')) {
+                      console.warn('Warning: Resolved content still contains placeholders');
+                    }
+                  } else {
+                    console.warn('All content resolution methods failed');
                   }
                 }
               }
@@ -507,23 +561,77 @@ export async function POST(request: Request) {
         // If content still has placeholders (convertedEmail.content), make one final attempt
         if (convertedEmail.content.includes('{% content_attribute') || 
             convertedEmail.content.includes('{{ default_email_body }}')) {
-          console.log('Content still contains placeholders after conversion. Making one last attempt to get rendered content...');
+          console.log('Content still contains placeholders after conversion. Making one last attempt to get actual content...');
           
           try {
-            // Last attempt to get fully rendered content
-            const renderedContent = await getHubspotRenderedEmailContent(hubspotAccessToken, email.id);
+            // Method 1: Try to manually parse out the placeholder and resolve it
+            if (email.state === 'PUBLISHED' || email.state === 'SENT') {
+              console.log('Trying to fetch the content directly from a published email...');
+              
+              // Try to fetch the email directly to get the rendered version
+              try {
+                const emailUrl = `https://api.hubapi.com/marketing/v3/emails/detail/${email.id}`;
+                const response = await axios.get(emailUrl, {
+                  headers: {
+                    Authorization: `Bearer ${hubspotAccessToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (response.data && response.data.htmlContent) {
+                  console.log(`Found HTML content in detail API (${response.data.htmlContent.length} chars)`);
+                  convertedEmail.content = `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    ${response.data.htmlContent}
+                  </div>`;
+                  console.log('Successfully replaced content with detail API version');
+                }
+              } catch (detailError: any) {
+                console.warn(`Detail API failed: ${detailError.message}`);
+              }
+            }
             
-            // Replace the content directly
-            convertedEmail.content = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-              ${renderedContent}
-            </div>`;
-            
-            console.log('Successfully replaced content with rendered version');
+            // Method 2: If the email was never published, try final approach to resolve default_email_body
+            if (convertedEmail.content.includes('{{ default_email_body }}')) {
+              console.log('Trying to extract default content manually...');
+              
+              try {
+                // Try getting the email module content
+                const modulesUrl = `https://api.hubapi.com/marketing-emails/v1/emails/${email.id}/modules`;
+                const modulesResponse = await axios.get(modulesUrl, {
+                  headers: {
+                    Authorization: `Bearer ${hubspotAccessToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                // Look for module content that contains HTML
+                if (modulesResponse.data && Array.isArray(modulesResponse.data)) {
+                  const htmlModules = modulesResponse.data.filter((module: any) => 
+                    module.body && (typeof module.body === 'string' && module.body.includes('<')));
+                  
+                  if (htmlModules.length > 0) {
+                    const htmlContent = htmlModules.map((m: any) => m.body).join('\n');
+                    console.log(`Found HTML content in modules (${htmlContent.length} chars)`);
+                    
+                    convertedEmail.content = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                      ${htmlContent}
+                    </div>`;
+                    console.log('Successfully replaced content with modules content');
+                  }
+                }
+              } catch (modulesError: any) {
+                console.warn(`Modules API failed: ${modulesError.message}`);
+              }
+            }
           } catch (finalError: any) {
-            console.warn(`Final attempt to get rendered content failed: ${finalError.message}`);
-            
-            // If we still have placeholders, replace with a simple message as last resort
+            console.warn(`Final attempts failed: ${finalError.message}`);
+          }
+          
+          // If we still have placeholders after all attempts, use a generic template
+          if (convertedEmail.content.includes('{% content_attribute') || 
+              convertedEmail.content.includes('{{ default_email_body }}')) {
             convertedEmail.content = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
               <p>This is a migrated email from HubSpot: ${convertedEmail.name}</p>

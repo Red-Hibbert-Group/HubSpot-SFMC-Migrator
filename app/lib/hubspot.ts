@@ -329,4 +329,96 @@ export const getHubspotRenderedEmailContent = async (accessToken: string, emailI
     console.error(`Error fetching rendered email content for ID ${emailId}:`, error.message);
     throw error;
   }
+};
+
+// Get email content from Editor API
+export const getHubspotEmailEditorContent = async (accessToken: string, emailId: string) => {
+  try {
+    console.log(`Trying to get email content from Editor API for ID ${emailId}`);
+    // Use the Editor API endpoint which might have more content details
+    const editorUrl = `https://api.hubapi.com/marketing-emails/v1/emails/${emailId}/edit`;
+    
+    const response = await axios.get(editorUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log(`Editor API response received with keys: ${Object.keys(response.data).join(', ')}`);
+    
+    // Check for content in various locations within the response
+    if (response.data.body && response.data.body.html) {
+      console.log(`Found HTML content in body.html field (${response.data.body.html.length} characters)`);
+      return response.data.body.html;
+    } 
+    else if (response.data.body && response.data.body.content) {
+      console.log(`Found content in body.content field (${response.data.body.content.length} characters)`);
+      return response.data.body.content;
+    }
+    else if (response.data.metaData && response.data.metaData.htmlBody) {
+      console.log(`Found content in metaData.htmlBody field (${response.data.metaData.htmlBody.length} characters)`);
+      return response.data.metaData.htmlBody;
+    }
+    else if (response.data.content) {
+      console.log(`Found content in content field (${response.data.content.length} characters)`);
+      return response.data.content;
+    }
+    
+    // If we couldn't find content in expected fields, try to extract from the whole response
+    const responseStr = JSON.stringify(response.data);
+    const htmlMatch = responseStr.match(/<html[^>]*>([\s\S]*?)<\/html>/i);
+    if (htmlMatch && htmlMatch[0]) {
+      console.log(`Found HTML content in full response (${htmlMatch[0].length} characters)`);
+      return htmlMatch[0];
+    }
+    
+    console.log(`Could not find usable content in Editor API response`);
+    return '';
+  } catch (error: any) {
+    console.error(`Error accessing Editor API for email ID ${emailId}:`, error.message);
+    return '';
+  }
+};
+
+// Try to resolve content_attribute placeholders using the default content endpoint
+export const resolveHubspotDefaultContent = async (accessToken: string, emailId: string) => {
+  try {
+    console.log(`Trying to resolve default content for email ID ${emailId}`);
+    
+    // Try to get default email content from the email defaults endpoint
+    const defaultsUrl = `https://api.hubapi.com/marketing-emails/v1/emails/${emailId}/defaults`;
+    
+    const response = await axios.get(defaultsUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log(`Default content response received with keys: ${Object.keys(response.data).join(', ')}`);
+    
+    // Look for default_email_body property
+    if (response.data.default_email_body) {
+      console.log(`Found default_email_body content (${response.data.default_email_body.length} characters)`);
+      return response.data.default_email_body;
+    }
+    
+    // If not found in expected field, search for it in the full response
+    const responseStr = JSON.stringify(response.data);
+    if (responseStr.includes('default_email_body')) {
+      const match = responseStr.match(/"default_email_body"\s*:\s*"([^"]*)"/);
+      if (match && match[1]) {
+        const content = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        console.log(`Extracted default_email_body from full response (${content.length} characters)`);
+        return content;
+      }
+    }
+    
+    console.log(`Could not find default content in response`);
+    return '';
+  } catch (error: any) {
+    console.error(`Error getting default content for email ID ${emailId}:`, error.message);
+    return '';
+  }
 }; 
