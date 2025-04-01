@@ -223,19 +223,17 @@ export async function POST(request: Request) {
     let hubspotTemplates = [];
     
     try {
-      // Directly call the API instead of using our helper to bypass potential issues
-      const response = await axios.get('https://api.hubapi.com/cms/v3/design-manager/templates', {
-        params: {
-          limit: 100
-        },
+      // Use the Marketing Email Templates API instead of CMS Templates API
+      const response = await axios.get('https://api.hubapi.com/marketing-emails/v1/templates', {
         headers: {
           'Authorization': `Bearer ${hubspotAccessToken}`,
           'Content-Type': 'application/json'
         }
       });
       
-      hubspotTemplates = response.data.results || [];
-      console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot API`);
+      // The response structure is different from the CMS API
+      hubspotTemplates = response.data || [];
+      console.log(`Got ${hubspotTemplates.length} templates directly from HubSpot Marketing Email API`);
     } catch (error: any) {
       console.error('Error fetching templates directly from HubSpot:', error);
       
@@ -264,19 +262,15 @@ export async function POST(request: Request) {
       });
     }
     
-    // Filter email templates if needed
-    const emailTemplates = hubspotTemplates.filter((template: any) => 
-      // Include templates that are likely to be email templates
-      template.type === 'EMAIL' || 
-      template.categoryId === 'EMAIL' || 
-      (template.labels && template.labels.includes('EMAIL'))
-    ) || hubspotTemplates; // If no email templates found, use all templates
+    // With Marketing Email Templates API, we don't need to filter for email templates
+    // since all templates from this API are email templates
+    const emailTemplates = hubspotTemplates;
     
     // Limit the number of templates to migrate
     const templateToMigrate = emailTemplates.slice(0, limit);
     
     // Log count of templates
-    console.log(`Found ${hubspotTemplates.length} total templates, ${emailTemplates.length} email templates, migrating ${templateToMigrate.length}`);
+    console.log(`Found ${hubspotTemplates.length} email templates, migrating ${templateToMigrate.length}`);
     
     // Migration results
     const results = [];
@@ -287,32 +281,18 @@ export async function POST(request: Request) {
       try {
         console.log(`Processing template: ${template.name} (ID: ${template.id})`);
         
-        // Fetch the template content if not included
-        let templateContent = template.source || template.content;
+        // In Marketing Email Templates API, the HTML content is in template.content
+        const templateContent = template.content || '';
         
-        if (!templateContent && template.id) {
-          try {
-            // Try to fetch template content from HubSpot
-            const templateDetails = await axios.get(
-              `https://api.hubapi.com/cms/v3/design-manager/templates/${template.id}`, 
-              {
-                headers: {
-                  'Authorization': `Bearer ${hubspotAccessToken}`,
-                  'Content-Type': 'application/json'
-                }
-              }
-            );
-            templateContent = templateDetails.data.source;
-          } catch (error) {
-            console.error(`Error fetching template content for ${template.name}:`, error);
-            templateContent = `<p>Failed to fetch template content for ${template.name}</p>`;
-          }
+        if (!templateContent) {
+          console.warn(`Template ${template.name} has no content, skipping`);
+          continue;
         }
         
         // Convert template to SFMC format
         const convertedTemplate = convertHubspotTemplate({
           ...template,
-          source: templateContent || `<p>Template: ${template.name}</p>`
+          source: templateContent
         });
         
         // Create template in SFMC
