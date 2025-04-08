@@ -33,9 +33,34 @@ export default function Home() {
         <h1 className="text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl mb-6">
           HubSpot to SFMC <span className="text-red-700">Migration Tool</span>
         </h1>
-        <p className="text-xl leading-8 text-gray-600 mb-12 max-w-3xl mx-auto">
+        <p className="text-xl leading-8 text-gray-600 mb-8 max-w-3xl mx-auto">
           Our dedicated migration tool helps you transfer your marketing assets from HubSpot to Salesforce Marketing Cloud with ease and precision.
         </p>
+        
+        {/* Information banner */}
+        <div className="bg-blue-50 p-5 rounded-lg border border-blue-200 mb-10 max-w-3xl mx-auto">
+          <div className="flex">
+            <div className="flex-shrink-0 pt-0.5">
+              <svg className="h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3 text-left">
+              <h4 className="text-sm font-medium text-blue-800">About this migration tool:</h4>
+              <p className="mt-2 text-sm text-blue-700">
+                This tool was developed by Red Hibbert Group, a Salesforce Marketing Cloud experts team, to simplify the migration process from HubSpot to SFMC. It securely transfers your data without storing any credentials permanently.
+              </p>
+              <p className="mt-2 text-sm text-blue-700">
+                <strong>Before using this tool, you should have:</strong>
+              </p>
+              <ul className="list-disc pl-5 mt-1 text-sm text-blue-700 space-y-1">
+                <li>Admin access to your HubSpot account</li>
+                <li>Admin access to your Salesforce Marketing Cloud instance</li>
+                <li>Server-to-Server API integration set up in SFMC (instructions provided)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-16">
           <div className="bg-white p-8 rounded-lg shadow-lg border border-gray-200">

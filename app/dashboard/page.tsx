@@ -410,6 +410,23 @@ function DashboardContent() {
 
       {/* Main content section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Page Introduction */}
+        <div className="bg-blue-50 p-4 rounded-lg shadow-sm mb-8">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 mt-0.5">
+              <svg className="h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">Migration Tool Information</h3>
+              <div className="mt-1 text-sm text-blue-700">
+                <p>This tool securely transfers your marketing assets from HubSpot to Salesforce Marketing Cloud. Complete each step below to perform the migration.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Connection status section */}
         <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
           <div className="px-4 py-5 sm:px-6 bg-red-700 text-white">
@@ -419,6 +436,27 @@ function DashboardContent() {
             </p>
           </div>
           <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+            {/* Information banner */}
+            <div className="bg-blue-50 p-4 rounded-lg mb-6">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1 md:flex md:justify-between">
+                  <p className="text-sm text-blue-700">
+                    You must connect to both HubSpot and Salesforce Marketing Cloud before migration. SFMC requires API credentials from an Installed Package with Server-to-Server integration.
+                  </p>
+                  <p className="mt-3 text-sm md:mt-0 md:ml-6">
+                    <a href="https://developer.salesforce.com/docs/marketing/marketing-cloud/guide/install-packages.html" className="whitespace-nowrap font-medium text-blue-700 hover:text-blue-600" target="_blank" rel="noopener noreferrer">
+                      Learn more <span aria-hidden="true">&rarr;</span>
+                    </a>
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Connection status content */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* HubSpot Connection */}
@@ -426,6 +464,15 @@ function DashboardContent() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium">HubSpot</h3>
                   {renderStatusBadge(hubspotStatus)}
+                </div>
+                
+                <div className="text-sm text-gray-600 mb-4">
+                  <p className="flex items-center">
+                    <svg className="h-4 w-4 text-blue-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Required for: OAuth authentication to access your HubSpot data
+                  </p>
                 </div>
                 
                 {hubspotStatus === 'disconnected' && (
@@ -443,6 +490,15 @@ function DashboardContent() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium">Salesforce Marketing Cloud</h3>
                   {renderStatusBadge(sfmcStatus)}
+                </div>
+
+                <div className="text-sm text-gray-600 mb-4">
+                  <p className="flex items-center">
+                    <svg className="h-4 w-4 text-blue-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Required for: API access to create assets in your SFMC instance
+                  </p>
                 </div>
                 
                 {sfmcStatus !== 'connected' && (
@@ -477,6 +533,27 @@ function DashboardContent() {
                 <p className="text-gray-600 mb-2">
                   Migrate your HubSpot contacts and lists to SFMC Data Extensions.
                 </p>
+
+                {/* Information section */}
+                <div className="bg-blue-50 p-3 rounded-md mb-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h4 className="text-sm font-medium text-blue-800">What gets migrated:</h4>
+                      <ul className="mt-1 text-xs text-blue-700 list-disc ml-4 space-y-1">
+                        <li>Contact details including name, email, and all associated properties</li>
+                        <li>Contact lists will be created as separate Data Extensions</li>
+                        <li>HubSpot properties are automatically mapped to SFMC attributes</li>
+                        <li>Email addresses are used as the unique identifier</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
                 {renderMigrationResults('contacts')}
               </div>
               
@@ -489,6 +566,29 @@ function DashboardContent() {
                 <p className="text-gray-600 mb-2">
                   Migrate your HubSpot email campaigns to SFMC as structured Content Builder emails.
                 </p>
+
+                {/* Information section */}
+                <div className="bg-blue-50 p-3 rounded-md mb-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h4 className="text-sm font-medium text-blue-800">What gets migrated:</h4>
+                      <ul className="mt-1 text-xs text-blue-700 list-disc ml-4 space-y-1">
+                        <li>Full email HTML content with all styling preserved</li>
+                        <li>Subject lines, preheaders, and sender information</li>
+                        <li>Emails are created as editable template-based emails in Content Builder</li>
+                        <li>Proper SFMC structure with content blocks for easy editing</li>
+                        <li>Images are referenced from their original HubSpot URLs</li>
+                      </ul>
+                      <p className="mt-2 text-xs text-blue-800 font-medium">Note: For best results, ensure you have proper access to Content Builder in SFMC.</p>
+                    </div>
+                  </div>
+                </div>
+
                 {renderMigrationResults('emails')}
               </div>
             </div>
@@ -501,6 +601,28 @@ function DashboardContent() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Connect to Salesforce Marketing Cloud</h3>
+            
+            {/* Information banner */}
+            <div className="bg-blue-50 p-3 rounded border border-blue-200 mb-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h4 className="text-sm font-medium text-blue-800">How to find your SFMC API credentials:</h4>
+                  <ol className="mt-1 text-xs text-blue-700 list-decimal space-y-1 ml-4">
+                    <li>Log in to your SFMC account</li>
+                    <li>Navigate to Setup &gt; Platform Tools &gt; Apps &gt; Installed Packages</li>
+                    <li>Create a new package or use an existing one</li>
+                    <li>Add a "Server-to-Server" API component</li>
+                    <li>Copy the Client ID, Client Secret, and note your subdomain from your SFMC URL</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+            
             <form onSubmit={connectToSFMC}>
               <div className="space-y-4">
                 <div>
