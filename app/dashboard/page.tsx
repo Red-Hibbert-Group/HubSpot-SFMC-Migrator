@@ -7,7 +7,6 @@ import { useEffect, useState, Suspense, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
-import Image from 'next/image';
 
 // Define integration status types
 type IntegrationStatus = 'loading' | 'connected' | 'disconnected' | 'error';
@@ -19,7 +18,7 @@ function DashboardLoader() {
   return (
     <div className="flex items-center justify-center h-screen">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mx-auto"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500 mx-auto"></div>
         <p className="mt-4 text-gray-600">Loading dashboard...</p>
       </div>
     </div>
@@ -47,23 +46,14 @@ function DashboardContent() {
   // State for SFMC modal
   const [showSfmcModal, setShowSfmcModal] = useState(false);
 
-  // State for migration modules
+  // State for migration modules - Removed templates section
   const [migrationStatus, setMigrationStatus] = useState<Record<string, MigrationStatus>>({
     contacts: 'idle',
-    templates: 'idle',
     emails: 'idle'
   });
 
   // State for migration results
   const [migrationResults, setMigrationResults] = useState<Record<string, MigrationResult>>({});
-
-  // Define state for custom template data
-  const [customTemplate, setCustomTemplate] = useState({
-    name: '',
-    content: '',
-    folderId: ''
-  });
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   // State for folder ID modal
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -79,11 +69,6 @@ function DashboardContent() {
 
   // Add a ref for the folder dropdown
   const folderDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Add a state for folder explorer around line 67-70 where other states are defined
-  const [showFolderExplorer, setShowFolderExplorer] = useState(false);
-  const [folderExplorerResults, setFolderExplorerResults] = useState<any>(null);
-  const [loadingFolderExplorer, setLoadingFolderExplorer] = useState(false);
 
   // HubSpot OAuth URL construction with fallback values
   const hubspotClientId = process.env.NEXT_PUBLIC_HUBSPOT_CLIENT_ID || '63e23121-89be-48fa-9e1b-7c68d7e1f83b';
@@ -108,25 +93,6 @@ function DashboardContent() {
       }, 500);
     }
   }, [userId, hubspotToken, router]);
-
-  // Add click outside handler for the folder dropdown
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (folderDropdownRef.current && !folderDropdownRef.current.contains(event.target as Node)) {
-        setShowFolderDropdown(false);
-      }
-    }
-    
-    // Add event listener when dropdown is open
-    if (showFolderDropdown) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    
-    // Clean up
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [showFolderDropdown]);
 
   // Handle SFMC form input changes
   const handleSfmcInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -169,134 +135,6 @@ function DashboardContent() {
     }
   };
 
-  // Handle template input change
-  const handleTemplateInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setCustomTemplate(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  // Upload custom template
-  const uploadCustomTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!customTemplate.name || !customTemplate.content) {
-      alert('Template name and content are required');
-      return;
-    }
-    
-    try {
-      setMigrationStatus(prev => ({
-        ...prev,
-        templates: 'loading'
-      }));
-      
-      // Prepare API request data
-      const requestData: any = {
-        userId,
-        hubspotToken,
-        sfmcCredentials,
-        customTemplates: [
-          {
-            id: `custom-${Date.now()}`,
-            name: customTemplate.name,
-            content: customTemplate.content
-          }
-        ]
-      };
-      
-      // Add folderId if provided
-      if (customTemplate.folderId && customTemplate.folderId.trim()) {
-        requestData.folderId = parseInt(customTemplate.folderId.trim(), 10);
-      }
-      
-      // Call migration API with customTemplates array
-      const response = await axios.post(`/api/migrate/templates`, requestData);
-      
-      // Update migration status and results
-      setMigrationStatus(prev => ({
-        ...prev,
-        templates: 'success'
-      }));
-      
-      setMigrationResults(prev => ({
-        ...prev,
-        templates: response.data
-      }));
-      
-      // Reset form and close modal
-      setCustomTemplate({ name: '', content: '', folderId: '' });
-      setShowTemplateModal(false);
-      
-    } catch (error) {
-      console.error('Error uploading custom template:', error);
-      
-      setMigrationStatus(prev => ({
-        ...prev,
-        templates: 'error'
-      }));
-      
-      setMigrationResults(prev => ({
-        ...prev,
-        templates: { error: 'Template upload failed' }
-      }));
-    }
-  };
-
-  // Modify getSFMCFolders to also fetch Email Studio folders
-  const getSFMCFolders = async () => {
-    if (!sfmcCredentials.clientId || !sfmcCredentials.clientSecret || !sfmcCredentials.subdomain) {
-      alert('SFMC credentials are required');
-      return;
-    }
-    
-    setLoading(true);
-    setShowFolderDropdown(false);
-    
-    try {
-      // Get Content Builder folders
-      const response = await axios.post('/api/sfmc/folders', {
-        sfmcCredentials
-      });
-      
-      if (response.data && response.data.items) {
-        setFolders(response.data.items);
-      }
-
-      // Get Email Studio folders if we're in email migration mode
-      if (migrationModule === 'emails') {
-        try {
-          const emailFoldersResponse = await axios.post('/api/sfmc/email-folders', {
-            sfmcCredentials
-          });
-          
-          if (emailFoldersResponse.data) {
-            setEmailFolders(emailFoldersResponse.data);
-          }
-        } catch (emailFolderError) {
-          console.error('Error fetching Email Studio folders:', emailFolderError);
-          // Don't alert, just log the error
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching SFMC folders:', error);
-      alert('Failed to fetch SFMC folders');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Filter folders based on search term for both folder types
-  const filteredFolders = folders.filter(folder => 
-    folder.name.toLowerCase().includes(folderSearchTerm.toLowerCase()) || 
-    folder.id.toString().includes(folderSearchTerm));
-  
-  const filteredEmailFolders = emailFolders.filter(folder => 
-    folder.name.toLowerCase().includes(folderSearchTerm.toLowerCase()) || 
-    folder.id.toString().includes(folderSearchTerm));
-
   // Start migration for a specific module
   const startMigration = async (module: string) => {
     if (!userId) {
@@ -304,16 +142,14 @@ function DashboardContent() {
       return;
     }
     
-    console.log(`Starting migration for module: ${module}, current status: ${migrationStatus[module]}`);
-    setShowFolderDropdown(false);
-    
-    // For templates or emails module, prompt for folder ID if it's a new migration and no folder ID entered
-    if ((module === 'templates' || module === 'emails') && migrationStatus[module] === 'idle' && !folderIdInput) {
-      console.log(`Opening folder selection modal for ${module} migration`);
-      setMigrationModule(module);
-      setShowFolderModal(true);
+    // Check if both HubSpot and SFMC are connected
+    if (hubspotStatus !== 'connected' || sfmcStatus !== 'connected') {
+      alert('Please connect both HubSpot and SFMC before migrating');
       return;
     }
+    
+    console.log(`Starting migration for module: ${module}, current status: ${migrationStatus[module]}`);
+    setShowFolderDropdown(false);
     
     try {
       console.log(`Setting migration status to loading for ${module}`);
@@ -330,30 +166,6 @@ function DashboardContent() {
         limit: 100
       };
       
-      // Add folder ID for templates or emails
-      if (module === 'templates' || module === 'emails') {
-        if (folderIdInput && folderIdInput.trim()) {
-          try {
-            const folderId = parseInt(folderIdInput.trim(), 10);
-            if (isNaN(folderId)) {
-              throw new Error(`Invalid folder ID: ${folderIdInput}`);
-            }
-            requestData.folderId = folderId;
-            console.log(`Using folder ID: ${folderId} for ${module} migration`);
-          } catch (error) {
-            console.error(`Error parsing folder ID: ${folderIdInput}`, error);
-            alert(`Invalid folder ID: ${folderIdInput}. Please enter a valid number.`);
-            setMigrationStatus(prev => ({
-              ...prev,
-              [module]: 'idle'
-            }));
-            return;
-          }
-        } else {
-          console.log(`No folder ID provided for ${module}, will auto-create a folder`);
-        }
-      }
-
       console.log(`Making API request to /api/migrate/${module} with data:`, JSON.stringify(requestData, null, 2));
       
       // Call migration API
@@ -371,10 +183,6 @@ function DashboardContent() {
         [module]: response.data
       }));
       
-      // Reset folder input after successful migration
-      if (module === 'templates') {
-        setFolderIdInput('');
-      }
     } catch (error: any) {
       console.error(`Error migrating ${module}:`, error);
       
@@ -405,31 +213,11 @@ function DashboardContent() {
     }
   };
 
-  // Handle folder ID submission
-  const handleFolderIdSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Ensure we have a valid module to migrate
-    if (!migrationModule) {
-      console.error('No migration module specified');
-      return;
-    }
-    
-    // Close the modal first
-    setShowFolderModal(false);
-    
-    // Give time for the modal to close before starting migration
-    setTimeout(() => {
-      console.log(`Starting migration for ${migrationModule} with folder ID: ${folderIdInput || 'auto-create'}`);
-      startMigration(migrationModule);
-    }, 100);
-  };
-
   // Render connection status badge with Red Hibbert branding
   const renderStatusBadge = (status: IntegrationStatus) => {
     switch (status) {
       case 'connected':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Connected</span>;
+        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Connected</span>;
       case 'disconnected':
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Disconnected</span>;
       case 'error':
@@ -444,13 +232,17 @@ function DashboardContent() {
   // Render migration button with Red Hibbert branding
   const renderMigrationButton = (module: string) => {
     const status = migrationStatus[module];
+    const isDisabled = hubspotStatus !== 'connected' || sfmcStatus !== 'connected';
     
     switch (status) {
       case 'idle':
         return (
           <button 
             onClick={() => startMigration(module)}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-700 hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            disabled={isDisabled}
+            className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
+              isDisabled ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+            }`}
           >
             Migrate {module.charAt(0).toUpperCase() + module.slice(1)}
           </button>
@@ -459,7 +251,7 @@ function DashboardContent() {
         return (
           <button 
             disabled
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-300 cursor-not-allowed"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-300 cursor-not-allowed"
           >
             <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -484,7 +276,7 @@ function DashboardContent() {
         return (
           <button 
             onClick={() => startMigration(module)}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-700 hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
           >
             <svg className="-ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -571,59 +363,8 @@ function DashboardContent() {
         <p className="mt-2 text-xs">
           View full details in the logs below
         </p>
-
-        {migrationResults.emails && migrationResults.emails.migrated && (
-          <div className="mt-4">
-            <h3 className="text-md font-semibold mb-2">Migrated Emails ({migrationResults.emails.migrated.length}):</h3>
-            <ul className="pl-5 list-disc mb-4">
-              {migrationResults.emails.migrated.map((email: any) => (
-                <li key={email.id} className="mb-1 text-sm">
-                  <span className="font-medium">{email.name}</span>
-                  <span className="text-gray-600 text-xs ml-2">
-                    (SFMC ID: {email.sfmcId}{email.templateId ? `, Template ID: ${email.templateId}` : ''})
-                  </span>
-                </li>
-              ))}
-            </ul>
-            
-            {/* Add the Find My Emails button */}
-            <button
-              onClick={fetchFolderExplorer}
-              className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-sm hover:bg-blue-100"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              Find My Emails in SFMC
-            </button>
-          </div>
-        )}
       </div>
     );
-  };
-
-  // Fetch folder explorer data
-  const fetchFolderExplorer = async () => {
-    if (!sfmcCredentials.clientId || !sfmcCredentials.clientSecret || !sfmcCredentials.subdomain) {
-      alert('SFMC credentials are required');
-      return;
-    }
-    
-    setLoadingFolderExplorer(true);
-    setShowFolderExplorer(true);
-    
-    try {
-      const response = await axios.post('/api/sfmc/test-content-block', {
-        sfmcCredentials
-      });
-      
-      setFolderExplorerResults(response.data);
-    } catch (error) {
-      console.error('Error fetching folder explorer:', error);
-      alert('Failed to fetch folder explorer data');
-    } finally {
-      setLoadingFolderExplorer(false);
-    }
   };
 
   // If no userId, show a message
@@ -653,9 +394,8 @@ function DashboardContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center">
             <div className="w-48 h-10 relative mr-4">
-              {/* Use a text fallback if image is not available */}
               <div className="absolute inset-0 flex items-center justify-start">
-                <span className="text-red-700 font-bold text-xl">Red Hibbert Group</span>
+                <span className="text-red-700 font-bold text-xl">RED HIBBERT GROUP</span>
               </div>
             </div>
             <h1 className="text-2xl font-semibold text-gray-900">
@@ -691,7 +431,7 @@ function DashboardContent() {
                 {hubspotStatus === 'disconnected' && (
                   <a
                     href={`https://app.hubspot.com/oauth/authorize?client_id=${hubspotClientId}&redirect_uri=${encodeURIComponent(hubspotRedirectUri)}&scope=content%20automation%20oauth%20forms%20files%20crm.objects.contacts.write`}
-                    className="inline-block mt-2 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-md"
+                    className="inline-block mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md"
                   >
                     Connect HubSpot
                   </a>
@@ -708,7 +448,7 @@ function DashboardContent() {
                 {sfmcStatus !== 'connected' && (
                   <button
                     onClick={() => setShowSfmcModal(true)}
-                    className="inline-block mt-2 px-4 py-2 bg-red-700 text-white rounded-md hover:bg-red-800"
+                    className="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                   >
                     Connect SFMC
                   </button>
@@ -738,26 +478,6 @@ function DashboardContent() {
                   Migrate your HubSpot contacts and lists to SFMC Data Extensions.
                 </p>
                 {renderMigrationResults('contacts')}
-              </div>
-              
-              {/* Email Templates Migration */}
-              <div className="border-b border-gray-200 pb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">Email Templates</h3>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => setShowTemplateModal(true)}
-                      className="px-4 py-2 rounded-md text-white bg-red-700 hover:bg-red-800"
-                    >
-                      Upload Custom Template
-                    </button>
-                    {renderMigrationButton('templates')}
-                  </div>
-                </div>
-                <p className="text-gray-600 mb-2">
-                  Convert HubSpot email templates to SFMC Content Builder templates or upload your own custom templates.
-                </p>
-                {renderMigrationResults('templates')}
               </div>
               
               {/* Marketing Emails Migration */}
@@ -839,7 +559,7 @@ function DashboardContent() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-red-700 text-white rounded-md text-sm font-medium hover:bg-red-800"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
                 >
                   Connect
                 </button>

@@ -25,7 +25,7 @@ export default function Home() {
           <div className="w-64 h-16 relative">
             {/* Text fallback instead of Image */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-red-700 font-bold text-3xl">Red Hibbert Group</span>
+              <span className="text-red-700 font-bold text-3xl">RED HIBBERT GROUP</span>
             </div>
           </div>
         </div>
@@ -42,7 +42,7 @@ export default function Home() {
             <div className="text-red-700 text-3xl font-bold mb-6">What We Migrate</div>
             <ul className="text-left space-y-4">
               <li className="flex items-center text-lg">
-                <svg className="h-6 w-6 text-red-700 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                 </svg>
                 <div>
@@ -51,12 +51,12 @@ export default function Home() {
                 </div>
               </li>
               <li className="flex items-center text-lg">
-                <svg className="h-6 w-6 text-red-700 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="h-6 w-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
                 </svg>
                 <div>
-                  <span className="font-semibold">Email Templates</span>
-                  <p className="text-gray-600 text-sm mt-1">Migrate email designs and templates with their content</p>
+                  <span className="font-semibold">Marketing Emails</span>
+                  <p className="text-gray-600 text-sm mt-1">Transfer your email campaigns to SFMC</p>
                 </div>
               </li>
             </ul>
@@ -66,28 +66,28 @@ export default function Home() {
             <div className="text-red-700 text-3xl font-bold mb-6">How It Works</div>
             <ol className="text-left space-y-4 list-inside">
               <li className="flex items-center text-lg">
-                <span className="bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">1</span>
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">1</span>
                 <div>
                   <span className="font-semibold">Connect your HubSpot account</span>
                   <p className="text-gray-600 text-sm mt-1">Authorize access to your HubSpot data</p>
                 </div>
               </li>
               <li className="flex items-center text-lg">
-                <span className="bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">2</span>
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">2</span>
                 <div>
                   <span className="font-semibold">Connect your SFMC account</span>
                   <p className="text-gray-600 text-sm mt-1">Provide your SFMC API credentials</p>
                 </div>
               </li>
               <li className="flex items-center text-lg">
-                <span className="bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">3</span>
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">3</span>
                 <div>
                   <span className="font-semibold">Select what to migrate</span>
                   <p className="text-gray-600 text-sm mt-1">Choose which assets to transfer</p>
                 </div>
               </li>
               <li className="flex items-center text-lg">
-                <span className="bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">4</span>
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center mr-3 flex-shrink-0">4</span>
                 <div>
                   <span className="font-semibold">Start migration</span>
                   <p className="text-gray-600 text-sm mt-1">Begin the transfer process</p>
@@ -100,7 +100,7 @@ export default function Home() {
         <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-6 justify-center">
           <a 
             href={hubspotAuthUrl}
-            className="rounded-md bg-red-700 px-8 py-4 text-lg font-semibold text-white shadow-sm hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 transition-colors"
+            className="rounded-md bg-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors"
           >
             Connect HubSpot
           </a>
