@@ -1,156 +1,137 @@
 # HubSpot to SFMC Migration Tool
 
-A web application that helps marketing teams migrate their data from HubSpot to Salesforce Marketing Cloud (SFMC). Built with Next.js, Supabase, and Tailwind CSS.
+A powerful tool developed by [Red Hibbert Group](https://www.redhibbert.com/) for migrating marketing assets from HubSpot to Salesforce Marketing Cloud.
+
+![Red Hibbert Group Logo](https://www.redhibbert.com/images/logo.png)
 
 ## Features
 
-- 🔄 **Seamless Migration:** Transfer contacts, email templates, forms, and workflows from HubSpot to SFMC
-- 🔌 **OAuth Integration:** Connect to HubSpot with secure OAuth authentication
-- 🔑 **SFMC API Integration:** Connect to SFMC using API credentials
-- 📊 **Migration Dashboard:** Track migration progress and view logs
-- 🎨 **Modern UI:** Built with a clean, responsive design using Tailwind CSS
-- 🛡️ **Secure:** Tokens stored securely in Supabase database with proper authentication
+This application allows you to seamlessly migrate:
 
-## What Can Be Migrated
+- **Contacts & Lists** - Transfer your contact data and list memberships
+- **Email Templates** - Migrate email designs and templates with their content
 
-- **Contacts & Lists:** Migrate HubSpot contacts and lists to SFMC Data Extensions
-- **Email Templates:** Convert HubSpot email templates to SFMC Content Builder templates
-- **Forms:** Transform HubSpot forms into SFMC CloudPages with AMPscript
-- **Workflows:** Map HubSpot workflows to SFMC Journey Builder journeys
-
-## Setup & Installation
+## Getting Started
 
 ### Prerequisites
 
-- Node.js v14+ 
-- HubSpot developer account with OAuth app
-- SFMC account with API integration package
-- Supabase account for database
+- Node.js 18.x or later
+- HubSpot account with API access
+- Salesforce Marketing Cloud account with API access
 
-### Installation Steps
+### Installation
 
-1. **Clone the repository**
+1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/hubspot-sfmc-migrator.git
-   cd hubspot-sfmc-migrator
+   git clone https://github.com/Red-Hibbert-Group/HubSpot-SFMC-Migrator.git
+   cd HubSpot-SFMC-Migrator
    ```
 
-2. **Install dependencies**
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. **Set up environment variables**
-   - Copy `.env.example` to `.env.local`
-   - Fill in the required environment variables:
-     - HubSpot OAuth credentials
-     - Supabase URL and key
+3. Configure environment variables:
+   - Create a `.env.local` file with the following variables:
+   ```
+   # App
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-4. **Set up Supabase schema**
-   - Create a table called `integration_tokens` with the following structure:
-     - `id`: uuid (primary key)
-     - `user_id`: uuid (foreign key to auth.users)
-     - `platform`: text (hubspot or sfmc)
-     - `tokens`: jsonb
-     - `created_at`: timestamp with time zone
-     - `updated_at`: timestamp with time zone
+   # HubSpot OAuth
+   HUBSPOT_CLIENT_ID=your_hubspot_client_id
+   HUBSPOT_CLIENT_SECRET=your_hubspot_client_secret
+   HUBSPOT_REDIRECT_URI=http://localhost:3000/api/callback
+   NEXT_PUBLIC_HUBSPOT_CLIENT_ID=your_hubspot_client_id
+   NEXT_PUBLIC_HUBSPOT_REDIRECT_URI=http://localhost:3000/api/callback
 
-5. **Run the development server**
+   # Supabase (optional for persistent storage)
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+
+4. Run the development server:
    ```bash
    npm run dev
    ```
 
-6. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
 
-## Configuration
+## API Connection Guide
 
-### HubSpot Configuration
+### HubSpot API Setup
 
-1. Create a HubSpot developer account
-2. Create a new app with OAuth integration
-3. Set the redirect URI to `http://localhost:3000/api/auth/hubspot`
-4. Request the following scopes: contacts, content, forms, automation
-5. Copy the Client ID and Client Secret to your `.env.local` file
+1. Go to [HubSpot Developer Portal](https://developers.hubspot.com/)
+2. Create a new app by clicking "Create App" in the top right
+3. Select "Public App"
+4. Fill in the required information:
+   - App Name: "SFMC Migration Tool" (or your preferred name)
+   - Description: Brief description of your application
+5. In the "Auth" tab, configure:
+   - Redirect URL: Add your application callback URL (e.g., `https://your-domain.com/api/callback` or `http://localhost:3000/api/callback` for local development)
+   - Scopes: Select the following minimum required scopes:
+     - `contacts`
+     - `content`
+     - `forms` (optional)
+     - `automation`
+6. Click "Create App" to save your configuration
+7. Note your Client ID and Client Secret for the `.env.local` file
 
-### SFMC Configuration
+### Salesforce Marketing Cloud API Setup
 
-1. In SFMC, create a new Installed Package
-2. Add component type: API Integration
-3. Set the integration type to Server-to-Server
-4. Select appropriate scopes for contacts, content, and journey builder
-5. Copy the Client ID, Client Secret, and subdomain to use in the app
-
-## Development
-
-### Project Structure
-
-```
-hubspot-sfmc-migrator/
-├── app/
-│   ├── api/
-│   │   ├── auth/
-│   │   │   ├── hubspot/
-│   │   │   └── sfmc/
-│   │   └── migrate/
-│   │       ├── contacts/
-│   │       ├── templates/
-│   │       ├── forms/
-│   │       └── workflows/
-│   ├── dashboard/
-│   ├── components/
-│   ├── lib/
-│   ├── supabase/
-│   └── utils/
-├── public/
-└── ...config files
-```
-
-### APIs Used
-
-- **HubSpot API:** For fetching contacts, templates, forms, and workflows
-- **SFMC REST/SOAP APIs:** For creating data extensions, templates, CloudPages, and journeys
+1. Log in to your SFMC account and navigate to **Setup** (gear icon in top right)
+2. Search for "Installed Packages" and select it
+3. Click "New" to create a new package
+4. Enter a name for your package (e.g., "Migration Tool")
+5. Once created, click "Add Component" and select "API Integration"
+6. Select "Server-to-Server" integration type
+7. Set the following permissions:
+   - Email: Read, Write, Send
+   - Content Builder: Read, Write
+   - Data Extensions: Read, Write
+   - Subscribers: Read, Write
+8. Save the component
+9. Note the following information for your application:
+   - **Client ID**: Listed in the package details
+   - **Client Secret**: Listed in the package details
+   - **Subdomain**: Found in your SFMC URL (e.g., if your URL is `https://mc.s7.exacttarget.com`, the subdomain is `mc.s7`)
 
 ## Deployment
 
 ### Deploying to Vercel
 
-1. **Push your repository to GitHub**
+1. Create a Vercel account if you don't have one at [vercel.com](https://vercel.com)
+2. Install the Vercel CLI:
    ```bash
-   git add .
-   git commit -m "Prepare for deployment"
-   git push origin main
+   npm install -g vercel
    ```
+3. Deploy the application:
+   ```bash
+   vercel
+   ```
+4. Or connect your GitHub repository to Vercel for automated deployments
 
-2. **Deploy to Vercel**
-   - Import your GitHub repository into Vercel
-   - Configure the following environment variables in the Vercel dashboard:
-     - `NEXT_PUBLIC_APP_URL`: Your Vercel deployment URL
-     - `HUBSPOT_CLIENT_ID`: Your HubSpot OAuth app client ID
-     - `HUBSPOT_CLIENT_SECRET`: Your HubSpot OAuth app client secret
-     - `HUBSPOT_REDIRECT_URI`: Your Vercel URL + `/api/callback`
-     - `NEXT_PUBLIC_HUBSPOT_CLIENT_ID`: Same as HUBSPOT_CLIENT_ID
-     - `NEXT_PUBLIC_HUBSPOT_REDIRECT_URI`: Same as HUBSPOT_REDIRECT_URI
-     - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
-     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+### Environment Variables for Production
 
-3. **Update HubSpot OAuth App**
-   - After deployment, update your HubSpot app with the new redirect URI
-   - The redirect URI should now be `https://your-vercel-deployment-url.vercel.app/api/callback`
+When deploying, be sure to set the following environment variables:
 
-4. **Verify Deployment**
-   - Visit your Vercel deployment URL
-   - Test the connection to both HubSpot and SFMC
-   - Test a sample migration to ensure all components work correctly
+- `NEXT_PUBLIC_APP_URL`: Your production URL (e.g., `https://hub-spot-sfmc-migrator-nu.vercel.app`)
+- `HUBSPOT_REDIRECT_URI`: Your production callback URL (e.g., `https://hub-spot-sfmc-migrator-nu.vercel.app/api/callback`)
+- `NEXT_PUBLIC_HUBSPOT_REDIRECT_URI`: Same as above
+- `HUBSPOT_CLIENT_ID`: Your HubSpot client ID
+- `HUBSPOT_CLIENT_SECRET`: Your HubSpot client secret
+- `NEXT_PUBLIC_HUBSPOT_CLIENT_ID`: Same as HUBSPOT_CLIENT_ID
+
+## Support
+
+For support, please contact:
+
+Red Hibbert Group  
+3001 Bishop Dr, Suite 300  
+San Ramon, CA 94583  
+Phone: 732-734-8282  
+Email: contact@redhibbert.com
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Acknowledgements
-
-- HubSpot API Documentation
-- Salesforce Marketing Cloud API Documentation
-- Next.js Framework
-- Supabase for authentication and database
-- Tailwind CSS for styling
+This project is licensed under the MIT License - see the LICENSE file for details.
