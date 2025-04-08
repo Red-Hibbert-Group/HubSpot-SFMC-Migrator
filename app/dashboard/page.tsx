@@ -85,6 +85,10 @@ function DashboardContent() {
   const [folderExplorerResults, setFolderExplorerResults] = useState<any>(null);
   const [loadingFolderExplorer, setLoadingFolderExplorer] = useState(false);
 
+  // HubSpot OAuth URL construction with fallback values
+  const hubspotClientId = process.env.NEXT_PUBLIC_HUBSPOT_CLIENT_ID || '63e23121-89be-48fa-9e1b-7c68d7e1f83b';
+  const hubspotRedirectUri = process.env.NEXT_PUBLIC_HUBSPOT_REDIRECT_URI || 'http://localhost:3000/api/callback';
+
   // Check if we have userId
   useEffect(() => {
     if (!userId) {
@@ -649,13 +653,10 @@ function DashboardContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center">
             <div className="w-48 h-10 relative mr-4">
-              <Image 
-                src="/images/red-hibbert-logo.png" 
-                alt="Red Hibbert Group Logo" 
-                fill
-                style={{ objectFit: "contain" }}
-                priority
-              />
+              {/* Use a text fallback if image is not available */}
+              <div className="absolute inset-0 flex items-center justify-start">
+                <span className="text-red-700 font-bold text-xl">Red Hibbert Group</span>
+              </div>
             </div>
             <h1 className="text-2xl font-semibold text-gray-900">
               HubSpot to SFMC <span className="text-red-700">Migration Tool</span>
@@ -678,10 +679,175 @@ function DashboardContent() {
             </p>
           </div>
           <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
-            {/* ... continue with rest of your code for connection status ... */}
+            {/* Connection status content */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* HubSpot Connection */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">HubSpot</h3>
+                  {renderStatusBadge(hubspotStatus)}
+                </div>
+                
+                {hubspotStatus === 'disconnected' && (
+                  <a
+                    href={`https://app.hubspot.com/oauth/authorize?client_id=${hubspotClientId}&redirect_uri=${encodeURIComponent(hubspotRedirectUri)}&scope=content%20automation%20oauth%20forms%20files%20crm.objects.contacts.write`}
+                    className="inline-block mt-2 px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-md"
+                  >
+                    Connect HubSpot
+                  </a>
+                )}
+              </div>
+              
+              {/* SFMC Connection */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">Salesforce Marketing Cloud</h3>
+                  {renderStatusBadge(sfmcStatus)}
+                </div>
+                
+                {sfmcStatus !== 'connected' && (
+                  <button
+                    onClick={() => setShowSfmcModal(true)}
+                    className="inline-block mt-2 px-4 py-2 bg-red-700 text-white rounded-md hover:bg-red-800"
+                  >
+                    Connect SFMC
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Migration Modules Section */}
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+          <div className="px-4 py-5 sm:px-6 bg-red-700 text-white">
+            <h2 className="text-lg font-medium">Migration Modules</h2>
+            <p className="mt-1 max-w-2xl text-sm text-red-100">
+              Select what you want to migrate from HubSpot to SFMC
+            </p>
+          </div>
+          <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+            <div className="space-y-6">
+              {/* Contacts & Lists Migration */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">Contacts & Lists</h3>
+                  {renderMigrationButton('contacts')}
+                </div>
+                <p className="text-gray-600 mb-2">
+                  Migrate your HubSpot contacts and lists to SFMC Data Extensions.
+                </p>
+                {renderMigrationResults('contacts')}
+              </div>
+              
+              {/* Email Templates Migration */}
+              <div className="border-b border-gray-200 pb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">Email Templates</h3>
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowTemplateModal(true)}
+                      className="px-4 py-2 rounded-md text-white bg-red-700 hover:bg-red-800"
+                    >
+                      Upload Custom Template
+                    </button>
+                    {renderMigrationButton('templates')}
+                  </div>
+                </div>
+                <p className="text-gray-600 mb-2">
+                  Convert HubSpot email templates to SFMC Content Builder templates or upload your own custom templates.
+                </p>
+                {renderMigrationResults('templates')}
+              </div>
+              
+              {/* Marketing Emails Migration */}
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">Marketing Emails</h3>
+                  {renderMigrationButton('emails')}
+                </div>
+                <p className="text-gray-600 mb-2">
+                  Migrate your HubSpot email campaigns to SFMC as structured Content Builder emails.
+                </p>
+                {renderMigrationResults('emails')}
+              </div>
+            </div>
           </div>
         </div>
       </main>
+
+      {/* SFMC Connect Modal */}
+      {showSfmcModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Connect to Salesforce Marketing Cloud</h3>
+            <form onSubmit={connectToSFMC}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Client ID
+                  </label>
+                  <input
+                    type="text"
+                    name="clientId"
+                    value={sfmcCredentials.clientId}
+                    onChange={handleSfmcInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Enter your SFMC Client ID"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Client Secret
+                  </label>
+                  <input
+                    type="password"
+                    name="clientSecret"
+                    value={sfmcCredentials.clientSecret}
+                    onChange={handleSfmcInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="Enter your SFMC Client Secret"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Subdomain
+                  </label>
+                  <input
+                    type="text"
+                    name="subdomain"
+                    value={sfmcCredentials.subdomain}
+                    onChange={handleSfmcInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    placeholder="E.g. mc6yqkp89lf5hy7p1r6zcl09j"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Your subdomain can be found in your SFMC URL (e.g., https://mc.s7.exacttarget.com - the subdomain is "mc.s7")
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowSfmcModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-red-700 text-white rounded-md text-sm font-medium hover:bg-red-800"
+                >
+                  Connect
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 
 export default function Home() {
   // HubSpot OAuth URL construction with fallback values
@@ -24,14 +23,10 @@ export default function Home() {
       <div className="max-w-5xl w-full text-center mb-12">
         <div className="flex justify-center mb-8">
           <div className="w-64 h-16 relative">
-            {/* Replace with actual logo path */}
-            <Image 
-              src="/images/red-hibbert-logo.png" 
-              alt="Red Hibbert Group Logo" 
-              fill
-              style={{ objectFit: "contain" }}
-              priority
-            />
+            {/* Text fallback instead of Image */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-red-700 font-bold text-3xl">Red Hibbert Group</span>
+            </div>
           </div>
         </div>
         
