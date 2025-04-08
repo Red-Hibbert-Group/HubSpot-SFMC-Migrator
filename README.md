@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # HubSpot to SFMC Migration Tool
 
 A web application that helps marketing teams migrate their data from HubSpot to Salesforce Marketing Cloud (SFMC). Built with Next.js, Supabase, and Tailwind CSS.
@@ -42,7 +41,7 @@ A web application that helps marketing teams migrate their data from HubSpot to 
    ```
 
 3. **Set up environment variables**
-   - Copy `.env.local.example` to `.env.local`
+   - Copy `.env.example` to `.env.local`
    - Fill in the required environment variables:
      - HubSpot OAuth credentials
      - Supabase URL and key
@@ -114,12 +113,35 @@ hubspot-sfmc-migrator/
 
 ## Deployment
 
-This project can be easily deployed to Vercel:
+### Deploying to Vercel
 
-1. Push your repository to GitHub
-2. Import the repository into Vercel
-3. Configure the environment variables
-4. Deploy
+1. **Push your repository to GitHub**
+   ```bash
+   git add .
+   git commit -m "Prepare for deployment"
+   git push origin main
+   ```
+
+2. **Deploy to Vercel**
+   - Import your GitHub repository into Vercel
+   - Configure the following environment variables in the Vercel dashboard:
+     - `NEXT_PUBLIC_APP_URL`: Your Vercel deployment URL
+     - `HUBSPOT_CLIENT_ID`: Your HubSpot OAuth app client ID
+     - `HUBSPOT_CLIENT_SECRET`: Your HubSpot OAuth app client secret
+     - `HUBSPOT_REDIRECT_URI`: Your Vercel URL + `/api/callback`
+     - `NEXT_PUBLIC_HUBSPOT_CLIENT_ID`: Same as HUBSPOT_CLIENT_ID
+     - `NEXT_PUBLIC_HUBSPOT_REDIRECT_URI`: Same as HUBSPOT_REDIRECT_URI
+     - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+
+3. **Update HubSpot OAuth App**
+   - After deployment, update your HubSpot app with the new redirect URI
+   - The redirect URI should now be `https://your-vercel-deployment-url.vercel.app/api/callback`
+
+4. **Verify Deployment**
+   - Visit your Vercel deployment URL
+   - Test the connection to both HubSpot and SFMC
+   - Test a sample migration to ensure all components work correctly
 
 ## License
 
@@ -132,6 +154,3 @@ This project is licensed under the MIT License.
 - Next.js Framework
 - Supabase for authentication and database
 - Tailwind CSS for styling
-=======
-# HubSpot-SFMC-Migrator
->>>>>>> origin/main

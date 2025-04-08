@@ -150,20 +150,22 @@ export const getHubspotTemplates = async (client: Client) => {
   }
 };
 
-// Fetch marketing emails from HubSpot
-export const getHubspotMarketingEmails = async (accessToken: string, limit = 100, after?: string) => {
+// Get marketing emails from HubSpot with proper timestamp handling
+export const getHubspotMarketingEmails = async (accessToken: string, limit: number = 100): Promise<any[]> => {
   try {
-    // Set a default start timestamp of 1 year ago (required parameter for the API)
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    // Format as ISO string and then take only the date part (YYYY-MM-DD)
-    const startTimestamp = oneYearAgo.toISOString().split('T')[0];
+    console.log('Fetching marketing emails from HubSpot...');
     
-    // Build URL with required parameters
-    let url = `https://api.hubapi.com/marketing/v3/emails/statistics/list?limit=${limit}&startTimestamp=${startTimestamp}`;
-    if (after) {
-      url += `&after=${after}`;
-    }
+    // Calculate dates for filtering
+    const now = new Date();
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(now.getFullYear() - 2);
+    
+    // Format timestamps to epoch milliseconds (numbers, not strings)
+    const startTimestamp = twoYearsAgo.getTime();
+    // Don't include endTimestamp - it was causing the API error
+    
+    // Build URL with just the startTimestamp parameter
+    const url = `https://api.hubapi.com/marketing/v3/emails/statistics/list?limit=${limit}&startTimestamp=${startTimestamp}`;
     
     console.log(`Fetching marketing emails from: ${url}`);
     
@@ -174,27 +176,52 @@ export const getHubspotMarketingEmails = async (accessToken: string, limit = 100
       }
     });
     
-    const emails = response.data.results || [];
-    console.log(`Fetched ${emails.length} marketing emails`);
-    
-    // If there's pagination info and we need to fetch more
-    if (response.data.paging && response.data.paging.next && response.data.paging.next.after) {
-      const nextAfter = response.data.paging.next.after;
-      console.log(`Found pagination info, fetching next page with after=${nextAfter}`);
-      
-      // Recursively fetch the next page
-      const nextEmails = await getHubspotMarketingEmails(accessToken, limit, nextAfter);
-      return [...emails, ...nextEmails];
+    if (response.data && Array.isArray(response.data.results)) {
+      console.log(`Retrieved ${response.data.results.length} marketing emails from statistics endpoint`);
+      return response.data.results;
+    } else {
+      throw new Error('Unexpected response format from marketing emails API');
     }
-    
-    return emails;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching HubSpot marketing emails:', error);
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+    console.error('Response status:', error.response?.status);
+    console.error('Response data:', error.response?.data ? JSON.stringify(error.response.data, null, 2) : 'No response data');
+    
+    console.log('Error fetching from statistics endpoint, trying legacy endpoint:', error.message);
+    
+    // Try the legacy marketing emails endpoint as fallback
+    try {
+      console.log('Trying legacy marketing emails API');
+      const legacyUrl = `https://api.hubapi.com/marketing-emails/v1/emails`;
+      
+      const legacyResponse = await axios.get(legacyUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (legacyResponse.data) {
+        const responseType = typeof legacyResponse.data;
+        const responseKeys = responseType === 'object' ? Object.keys(legacyResponse.data) : [];
+        console.log(`Legacy API response structure: Type: ${responseType}, Keys: ${responseKeys.join(', ')}`);
+        
+        if (Array.isArray(legacyResponse.data.objects)) {
+          const emails = legacyResponse.data.objects.slice(0, limit);
+          console.log(`Retrieved ${emails.length} marketing emails from legacy API`);
+          return emails;
+        } else {
+          throw new Error('Unexpected response format from legacy marketing emails API');
+        }
+      } else {
+        throw new Error('No data returned from legacy marketing emails API');
+      }
+    } catch (legacyError: any) {
+      console.error('Error fetching from legacy endpoint:', legacyError.message);
+      
+      // If both methods fail, return an empty array
+      return [];
     }
-    throw error;
   }
 };
 
@@ -295,39 +322,67 @@ export const getHubspotWorkflows = async (client: Client) => {
   }
 };
 
-// Get rendered content for a marketing email (resolves placeholders like default_email_body)
-export const getHubspotRenderedEmailContent = async (accessToken: string, emailId: string) => {
+// Get rendered HTML content for a HubSpot marketing email
+export const getHubspotRenderedEmailContent = async (accessToken: string, emailId: string): Promise<string> => {
   try {
-    console.log(`Fetching rendered content for email ID ${emailId} using preview endpoint`);
-    const previewUrl = `https://api.hubapi.com/marketing-emails/v1/emails/${emailId}/preview`;
+    console.log(`Fetching rendered content for email ID ${emailId} using direct content approach`);
     
-    // Try the preview endpoint which resolves placeholders
-    const response = await axios.post(previewUrl, {}, {
+    // Instead of using the preview endpoint that's failing, get content directly from email details
+    const detailsUrl = `https://api.hubapi.com/marketing-emails/v1/emails/${emailId}`;
+    
+    const response = await axios.get(detailsUrl, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       }
     });
     
-    // The preview endpoint returns an object with 'html' containing the fully rendered content
-    if (response.data && response.data.html) {
-      console.log(`Successfully retrieved rendered HTML content, length: ${response.data.html.length} characters`);
-      
-      // Quick check to make sure we don't still have placeholders
-      if (response.data.html.includes('{% content_attribute')) {
-        console.warn('Warning: Rendered content still contains placeholders!');
+    if (response.data) {
+      // Use different properties depending on what's available
+      if (response.data.htmlContent) {
+        console.log(`Got HTML content (${response.data.htmlContent.length} chars) from details endpoint`);
+        return response.data.htmlContent;
+      } else if (response.data.emailBody) {
+        console.log(`Got email body content (${response.data.emailBody.length} chars) from details endpoint`);
+        return response.data.emailBody;
+      } else if (response.data.body) {
+        console.log(`Got body content (${response.data.body.length} chars) from details endpoint`);
+        return response.data.body;
       } else {
-        console.log('Rendered content appears to be properly resolved (no placeholders detected)');
+        console.warn(`Email content not found in response for ID ${emailId}`);
+        return `<div>Email content not available (ID: ${emailId})</div>`;
       }
-      
-      return response.data.html;
     } else {
-      console.warn('Preview endpoint response did not contain HTML content');
-      throw new Error('Preview endpoint did not return expected HTML content');
+      console.warn(`No data returned for email ID ${emailId}`);
+      return `<div>Email content not available (ID: ${emailId})</div>`;
     }
   } catch (error: any) {
     console.error(`Error fetching rendered email content for ID ${emailId}:`, error.message);
-    throw error;
+    
+    // Try alternative approach
+    try {
+      console.log(`Trying alternative details endpoint for email ID ${emailId}`);
+      
+      // Alternative endpoint
+      const alternativeUrl = `https://api.hubapi.com/marketing/v3/emails/${emailId}`;
+      
+      const altResponse = await axios.get(alternativeUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (altResponse.data && altResponse.data.htmlContent) {
+        console.log(`Got HTML content from alternative endpoint (${altResponse.data.htmlContent.length} chars)`);
+        return altResponse.data.htmlContent;
+      } else {
+        throw new Error('No HTML content in alternative endpoint response');
+      }
+    } catch (altError: any) {
+      console.error(`Alternative endpoint also failed for ID ${emailId}:`, altError.message);
+      throw error; // Throw the original error
+    }
   }
 };
 
@@ -420,5 +475,95 @@ export const resolveHubspotDefaultContent = async (accessToken: string, emailId:
   } catch (error: any) {
     console.error(`Error getting default content for email ID ${emailId}:`, error.message);
     return '';
+  }
+};
+
+// Get email content using the Content API (official documented method)
+export const getHubspotEmailContentOfficial = async (accessToken: string, emailId: string) => {
+  try {
+    console.log(`Fetching email content using official Content API for ID ${emailId}`);
+    
+    // First get email entity to obtain contentId
+    const emailResponse = await axios.get(`https://api.hubapi.com/marketing/v3/emails/${emailId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    // Check if we have the contentId reference needed for the Content API
+    if (!emailResponse.data || !emailResponse.data.contentId) {
+      console.warn(`Could not find contentId for email ${emailId}`);
+      // Try getting content directly from the email entity
+      if (emailResponse.data && emailResponse.data.content) {
+        const content = typeof emailResponse.data.content === 'string' 
+          ? emailResponse.data.content 
+          : JSON.stringify(emailResponse.data.content);
+        console.log(`Found content directly in email entity (${content.length} characters)`);
+        return content;
+      }
+      
+      throw new Error(`Email ${emailId} does not have contentId reference`);
+    }
+    
+    const contentId = emailResponse.data.contentId;
+    console.log(`Found contentId: ${contentId} for email ${emailId}`);
+    
+    // Now fetch the actual content using the contentId
+    const contentResponse = await axios.get(`https://api.hubapi.com/marketing/v3/email-content/${contentId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!contentResponse.data) {
+      throw new Error(`No content data returned for contentId ${contentId}`);
+    }
+    
+    // The content should be in the htmlContent field
+    if (contentResponse.data.htmlContent) {
+      console.log(`Successfully retrieved HTML content (${contentResponse.data.htmlContent.length} characters)`);
+      return contentResponse.data.htmlContent;
+    } 
+    
+    // Try to find content in other places if htmlContent is not available
+    if (contentResponse.data.rawHtmlContent) {
+      console.log(`Using rawHtmlContent field (${contentResponse.data.rawHtmlContent.length} characters)`);
+      return contentResponse.data.rawHtmlContent;
+    }
+    
+    if (contentResponse.data.bodies && contentResponse.data.bodies.html) {
+      console.log(`Using bodies.html field (${contentResponse.data.bodies.html.length} characters)`);
+      return contentResponse.data.bodies.html;
+    }
+    
+    console.warn(`Content exists but couldn't find HTML in expected fields`);
+    console.log(`Available fields in content: ${Object.keys(contentResponse.data).join(', ')}`);
+    
+    // Last resort - return the string representation of the entire content object
+    return JSON.stringify(contentResponse.data);
+  } catch (error: any) {
+    console.error(`Error fetching official email content for ID ${emailId}:`, error.message);
+    
+    // Try alternative documented approach - the single send API
+    try {
+      console.log(`Trying single send content endpoint for email ${emailId}`);
+      const singleSendResponse = await axios.get(`https://api.hubapi.com/marketing/v3/transactional/single-sends/${emailId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (singleSendResponse.data && singleSendResponse.data.emailContent) {
+        console.log(`Found content in single send API response`);
+        return singleSendResponse.data.emailContent;
+      }
+    } catch (singleSendError: any) {
+      console.warn(`Single send API failed: ${singleSendError.message}`);
+    }
+    
+    throw new Error(`Failed to retrieve email content via official Content API: ${error.message}`);
   }
 }; 

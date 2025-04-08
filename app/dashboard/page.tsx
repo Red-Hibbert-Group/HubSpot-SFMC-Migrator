@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
@@ -72,8 +72,14 @@ function DashboardContent() {
   const [migrationModule, setMigrationModule] = useState('');
 
   // State for SFMC folders
-  const [folders, setFolders] = useState<Array<any>>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [folders, setFolders] = useState<any[]>([]);
+  const [emailFolders, setEmailFolders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [folderSearchTerm, setFolderSearchTerm] = useState('');
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
+
+  // Add a ref for the folder dropdown
+  const folderDropdownRef = useRef<HTMLDivElement>(null);
 
   // Check if we have userId
   useEffect(() => {
@@ -94,6 +100,25 @@ function DashboardContent() {
       }, 500);
     }
   }, [userId, hubspotToken, router]);
+
+  // Add click outside handler for the folder dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (folderDropdownRef.current && !folderDropdownRef.current.contains(event.target as Node)) {
+        setShowFolderDropdown(false);
+      }
+    }
+    
+    // Add event listener when dropdown is open
+    if (showFolderDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    
+    // Clean up
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showFolderDropdown]);
 
   // Handle SFMC form input changes
   const handleSfmcInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,6 +237,58 @@ function DashboardContent() {
     }
   };
 
+  // Modify getSFMCFolders to also fetch Email Studio folders
+  const getSFMCFolders = async () => {
+    if (!sfmcCredentials.clientId || !sfmcCredentials.clientSecret || !sfmcCredentials.subdomain) {
+      alert('SFMC credentials are required');
+      return;
+    }
+    
+    setLoading(true);
+    setShowFolderDropdown(false);
+    
+    try {
+      // Get Content Builder folders
+      const response = await axios.post('/api/sfmc/folders', {
+        sfmcCredentials
+      });
+      
+      if (response.data && response.data.items) {
+        setFolders(response.data.items);
+      }
+
+      // Get Email Studio folders if we're in email migration mode
+      if (migrationModule === 'emails') {
+        try {
+          const emailFoldersResponse = await axios.post('/api/sfmc/email-folders', {
+            sfmcCredentials
+          });
+          
+          if (emailFoldersResponse.data) {
+            setEmailFolders(emailFoldersResponse.data);
+          }
+        } catch (emailFolderError) {
+          console.error('Error fetching Email Studio folders:', emailFolderError);
+          // Don't alert, just log the error
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching SFMC folders:', error);
+      alert('Failed to fetch SFMC folders');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter folders based on search term for both folder types
+  const filteredFolders = folders.filter(folder => 
+    folder.name.toLowerCase().includes(folderSearchTerm.toLowerCase()) || 
+    folder.id.toString().includes(folderSearchTerm));
+  
+  const filteredEmailFolders = emailFolders.filter(folder => 
+    folder.name.toLowerCase().includes(folderSearchTerm.toLowerCase()) || 
+    folder.id.toString().includes(folderSearchTerm));
+
   // Start migration for a specific module
   const startMigration = async (module: string) => {
     if (!userId) {
@@ -220,6 +297,7 @@ function DashboardContent() {
     }
     
     console.log(`Starting migration for module: ${module}, current status: ${migrationStatus[module]}`);
+    setShowFolderDropdown(false);
     
     // For templates or emails module, prompt for folder ID if it's a new migration and no folder ID entered
     if ((module === 'templates' || module === 'emails') && migrationStatus[module] === 'idle' && !folderIdInput) {
@@ -429,6 +507,18 @@ function DashboardContent() {
       <div className="mt-4 p-4 bg-green-50 text-green-700 rounded-md">
         <p className="font-semibold">Success:</p>
         <p>{result.message || `Migrated ${result.migrated} items`}</p>
+        
+        {module === 'emails' && (
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+            <p className="text-green-800">
+              Emails were migrated as structured Content Builder template emails with slots and blocks.
+            </p>
+            <p className="text-sm text-green-600 mt-1">
+              These emails have a proper template structure with header, content, and footer blocks, making them easy to edit in Content Builder while maintaining all HubSpot content and styling.
+            </p>
+          </div>
+        )}
+        
         {result.migrated && result.migrated.length > 0 && (
           <div className="mt-2 text-sm">
             <p className="font-semibold">Migrated {result.migrated.length} items:</p>
@@ -436,6 +526,9 @@ function DashboardContent() {
               {result.migrated.map((item: any, index: number) => (
                 <li key={index} className="text-xs">
                   {item.hubspotName || item.customName || `Item ${index + 1}`}
+                  {module === 'emails' && item.templateId && (
+                    <span className="ml-1 text-blue-600">(Template ID: {item.templateId})</span>
+                  )}
                 </li>
               )).slice(0, 5)}
               {result.migrated.length > 5 && <li className="text-xs">...and {result.migrated.length - 5} more</li>}
@@ -460,31 +553,6 @@ function DashboardContent() {
         </p>
       </div>
     );
-  };
-
-  // Get SFMC folders
-  const getSFMCFolders = async () => {
-    if (!sfmcCredentials.clientId || !sfmcCredentials.clientSecret || !sfmcCredentials.subdomain) {
-      alert('SFMC credentials are required');
-      return;
-    }
-    
-    setLoadingFolders(true);
-    
-    try {
-      const response = await axios.post('/api/sfmc/folders', {
-        sfmcCredentials
-      });
-      
-      if (response.data && response.data.items) {
-        setFolders(response.data.items);
-      }
-    } catch (error) {
-      console.error('Error fetching SFMC folders:', error);
-      alert('Failed to fetch SFMC folders');
-    } finally {
-      setLoadingFolders(false);
-    }
   };
 
   // If no userId, show a message
@@ -612,14 +680,186 @@ function DashboardContent() {
             </div>
 
             {/* Marketing Emails Migration */}
-            <div className="border-b border-gray-200 pb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium">Marketing Emails</h3>
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-xl font-semibold mb-2">Email Migration</h2>
+              <p className="text-gray-600 mb-4">
+                Migrate your HubSpot email campaigns to SFMC as structured Content Builder emails with proper slots and blocks, following Salesforce best practices.
+              </p>
+              
+              <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-r-md">
+                <h3 className="font-semibold text-blue-700">Select Folder for {migrationModule}</h3>
+                <p className="text-sm text-blue-600 mt-1">
+                  {migrationModule === 'emails' ? (
+                    <>
+                      <strong>Important:</strong> For proper template-based emails, we recommend using an Email Studio folder.
+                    </>
+                  ) : (
+                    <>
+                      Choose a folder from Content Builder where your migrated content will be created.
+                    </>
+                  )}
+                </p>
+                {migrationModule === 'emails' && (
+                  <div className="mt-2 text-sm text-blue-600 bg-blue-100 p-2 rounded">
+                    <strong>Important:</strong> This tool creates template-based emails using the official Salesforce Marketing Cloud API methods:
+                    <ul className="list-disc ml-5 mt-1">
+                      <li>Primary: SOAP API with proper template structure</li>
+                      <li>Fallback: REST API with complete email attributes</li>
+                    </ul>
+                    <p className="mt-1">All emails will include subject lines, preheaders and sender information as recommended by Salesforce.</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={getSFMCFolders}
+                    disabled={loading}
+                    className={`text-xs px-2 py-1 rounded ${
+                      loading ? 'bg-gray-200 text-gray-500' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    }`}
+                  >
+                    {loading ? 'Loading...' : 'Load Folders'}
+                  </button>
+                  
+                  {/* Custom dropdown with search */}
+                  <div className="relative inline-block text-left" ref={folderDropdownRef}>
+                    <div>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowFolderDropdown(!showFolderDropdown)}
+                        className={`text-sm border rounded px-2 py-1 bg-white inline-flex justify-between items-center w-64 ${
+                          folderIdInput && folders.some(f => f.id.toString() === folderIdInput)
+                            ? 'border-green-400' // Highlight with green border if it's an Email Studio folder
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        <span className="truncate">
+                          {folderIdInput 
+                            ? (folders.find(f => f.id.toString() === folderIdInput)?.name || 
+                               `Folder ID: ${folderIdInput}`)
+                            : "Select a folder"
+                          }
+                        </span>
+                        <svg className="-mr-1 ml-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        {folders.some(f => f.id.toString() === folderIdInput) && (
+                          <span className="ml-1 h-2 w-2 bg-green-500 rounded-full" title="Content Builder Folder"></span>
+                        )}
+                      </button>
+                    </div>
+                    
+                    {showFolderDropdown && (
+                      <div 
+                        className="origin-top-right absolute right-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
+                        role="menu"
+                        aria-orientation="vertical"
+                        aria-labelledby="menu-button"
+                      >
+                        <div className="p-2">
+                          <input
+                            type="text"
+                            value={folderSearchTerm}
+                            onChange={(e) => setFolderSearchTerm(e.target.value)}
+                            placeholder="Search folders..."
+                            className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        <div className="max-h-60 overflow-y-auto py-1" role="none">
+                          {/* "Select a folder" option */}
+                          <button
+                            onClick={() => {
+                              setFolderIdInput('');
+                              setShowFolderDropdown(false);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                            role="menuitem"
+                          >
+                            Select a folder
+                          </button>
+                          
+                          {/* Email Studio Folders - Show first if present */}
+                          {migrationModule === 'emails' && emailFolders.length > 0 && (
+                            <>
+                              <div className="p-2 sticky top-0 border-b border-gray-200 flex justify-between items-center bg-green-50">
+                                <h5 className="font-medium text-xs text-green-700">
+                                  Email Studio Folders
+                                </h5>
+                                <span className="bg-green-100 text-green-800 px-1.5 py-0.5 rounded text-xs font-medium">Recommended for Emails</span>
+                              </div>
+                              
+                              {filteredEmailFolders.map((folder, index) => (
+                                <button
+                                  key={`email-folder-${folder.id}-${index}`}
+                                  type="button"
+                                  onClick={() => setFolderIdInput(folder.id.toString())}
+                                  className={`w-full text-left px-3 py-2 border-b border-gray-200 text-sm hover:bg-blue-50 flex items-center ${
+                                    folderIdInput === folder.id.toString() ? 'bg-blue-50' : ''
+                                  }`}
+                                >
+                                  <span className="w-8 text-gray-500">
+                                    📧
+                                  </span>
+                                  <span>
+                                    {folder.name} 
+                                    <span className="ml-1 text-xs text-gray-500">({folder.id})</span>
+                                    <span className="ml-2 text-xs text-green-600">[Email Studio]</span>
+                                  </span>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                          
+                          {/* Content Builder Folders */}
+                          {folders.length > 0 && (
+                            <div className={`p-2 sticky top-0 border-b border-gray-200 flex justify-between items-center ${
+                              migrationModule === 'emails' ? 'bg-yellow-50' : 'bg-green-50'
+                            }`}>
+                              <h5 className={`font-medium text-xs ${migrationModule === 'emails' ? 'text-yellow-700' : 'text-green-700'}`}>
+                                Content Builder Folders
+                              </h5>
+                              {migrationModule === 'emails' && (
+                                <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded text-xs font-medium">Not Recommended for Emails</span>
+                              )}
+                            </div>
+                          )}
+                          
+                          {filteredFolders.map((folder, index) => (
+                            <button
+                              key={`content-builder-folder-${folder.id}-${index}`}
+                              type="button"
+                              onClick={() => setFolderIdInput(folder.id.toString())}
+                              className={`w-full text-left px-3 py-2 border-b border-gray-200 text-sm hover:bg-blue-50 flex items-center ${
+                                folderIdInput === folder.id.toString() ? 'bg-blue-50' : ''
+                              }`}
+                            >
+                              <span className="w-8 text-gray-500">
+                                {folder.parentId ? '📁' : '📂'}
+                              </span>
+                              <span>
+                                {folder.name} 
+                                <span className="ml-1 text-xs text-gray-500">({folder.id})</span>
+                              </span>
+                            </button>
+                          ))}
+                          
+                          {folders.length === 0 && emailFolders.length === 0 && (
+                            <div className="p-4 text-center text-gray-500 text-sm">
+                              {folderSearchTerm ? 'No folders match your search.' : 'No folders found. Please refresh to fetch folders.'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
                 {renderMigrationButton('emails')}
               </div>
-              <p className="text-gray-600 mb-2">
-                Migrate your HubSpot marketing emails to SFMC Content Builder emails, including subject lines and content.
-              </p>
+              
               {renderMigrationResults('emails')}
             </div>
             
@@ -824,6 +1064,32 @@ function DashboardContent() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Select SFMC Folder for {migrationModule}</h3>
+            
+            <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-r-md">
+              <h3 className="font-semibold text-blue-700">Select Folder for {migrationModule}</h3>
+              <p className="text-sm text-blue-600 mt-1">
+                {migrationModule === 'emails' ? (
+                  <>
+                    <strong>Important:</strong> For proper template-based emails, we recommend using an Email Studio folder.
+                  </>
+                ) : (
+                  <>
+                    Choose a folder from Content Builder where your migrated content will be created.
+                  </>
+                )}
+              </p>
+              {migrationModule === 'emails' && (
+                <div className="mt-2 text-sm text-blue-600 bg-blue-100 p-2 rounded">
+                  <strong>Important:</strong> This tool creates template-based emails using the official Salesforce Marketing Cloud API methods:
+                  <ul className="list-disc ml-5 mt-1">
+                    <li>Primary: SOAP API with proper template structure</li>
+                    <li>Fallback: REST API with complete email attributes</li>
+                  </ul>
+                  <p className="mt-1">All emails will include subject lines, preheaders and sender information as recommended by Salesforce.</p>
+                </div>
+              )}
+            </div>
+            
             <form onSubmit={handleFolderIdSubmit}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -833,55 +1099,153 @@ function DashboardContent() {
                   type="text"
                   value={folderIdInput}
                   onChange={e => setFolderIdInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className={`w-full px-3 py-2 border rounded-md ${
+                    migrationModule === 'emails' && folderIdInput && folders.some(f => f.id.toString() === folderIdInput)
+                      ? 'border-green-400' // Highlight with green border if it's an Email Studio folder
+                      : 'border-gray-300'
+                  }`}
                   placeholder="Enter folder ID, e.g. 13172"
                 />
                 <p className="mt-1 text-sm text-gray-500">
                   The numeric ID of the folder in SFMC where content will be created.
+                  {migrationModule === 'emails' && folders.some(f => f.id.toString() === folderIdInput) && (
+                    <span className="text-green-600 ml-1">✓ Valid Content Builder folder</span>
+                  )}
                 </p>
               </div>
               
+              {/* Folder Browser */}
               <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Common Folder IDs:</h4>
-                <div className="grid grid-cols-1 gap-2">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Your Folders:</h4>
+                
+                {/* Search Input */}
+                <div className="mb-2 relative">
+                  <input
+                    type="text"
+                    value={folderSearchTerm}
+                    onChange={(e) => setFolderSearchTerm(e.target.value)}
+                    placeholder="Search folders by name or ID..."
+                    className="w-full px-3 py-2 pl-9 border border-gray-300 rounded-md text-sm"
+                  />
+                  <div className="absolute left-3 top-2.5 text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  {folderSearchTerm && (
+                    <button 
+                      onClick={() => setFolderSearchTerm('')}
+                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                
+                {loading ? (
+                  <div className="text-center py-4">
+                    <div className="inline-block animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+                    <span className="text-sm text-gray-500">Loading folders...</span>
+                  </div>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md">
+                    {/* Email Studio Folders - Show first if present */}
+                    {migrationModule === 'emails' && emailFolders.length > 0 && (
+                      <>
+                        <div className="p-2 sticky top-0 border-b border-gray-200 flex justify-between items-center bg-green-50">
+                          <h5 className="font-medium text-xs text-green-700">
+                            Email Studio Folders
+                          </h5>
+                          <span className="bg-green-100 text-green-800 px-1.5 py-0.5 rounded text-xs font-medium">Recommended for Emails</span>
+                        </div>
+                        
+                        {filteredEmailFolders.map((folder, index) => (
+                          <button
+                            key={`email-folder-${folder.id}-${index}`}
+                            type="button"
+                            onClick={() => setFolderIdInput(folder.id.toString())}
+                            className={`w-full text-left px-3 py-2 border-b border-gray-200 text-sm hover:bg-blue-50 flex items-center ${
+                              folderIdInput === folder.id.toString() ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <span className="w-8 text-gray-500">
+                              📧
+                            </span>
+                            <span>
+                              {folder.name} 
+                              <span className="ml-1 text-xs text-gray-500">({folder.id})</span>
+                              <span className="ml-2 text-xs text-green-600">[Email Studio]</span>
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    
+                    {/* Content Builder Folders */}
+                    {folders.length > 0 && (
+                      <div className={`p-2 sticky top-0 border-b border-gray-200 flex justify-between items-center ${
+                        migrationModule === 'emails' ? 'bg-yellow-50' : 'bg-green-50'
+                      }`}>
+                        <h5 className={`font-medium text-xs ${migrationModule === 'emails' ? 'text-yellow-700' : 'text-green-700'}`}>
+                          Content Builder Folders
+                        </h5>
+                        {migrationModule === 'emails' && (
+                          <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded text-xs font-medium">Not Recommended for Emails</span>
+                        )}
+                      </div>
+                    )}
+                    
+                    {filteredFolders.map((folder, index) => (
+                      <button
+                        key={`content-builder-folder-${folder.id}-${index}`}
+                        type="button"
+                        onClick={() => setFolderIdInput(folder.id.toString())}
+                        className={`w-full text-left px-3 py-2 border-b border-gray-200 text-sm hover:bg-blue-50 flex items-center ${
+                          folderIdInput === folder.id.toString() ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <span className="w-8 text-gray-500">
+                          {folder.parentId ? '📁' : '📂'}
+                        </span>
+                        <span>
+                          {folder.name} 
+                          <span className="ml-1 text-xs text-gray-500">({folder.id})</span>
+                        </span>
+                      </button>
+                    ))}
+                    
+                    {folders.length === 0 && emailFolders.length === 0 && (
+                      <div className="p-4 text-center text-gray-500 text-sm">
+                        {folderSearchTerm ? 'No folders match your search.' : 'No folders found. Please refresh to fetch folders.'}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="mt-2 text-right">
                   <button
                     type="button"
-                    onClick={() => setFolderIdInput('13172')}
-                    className="text-left px-3 py-2 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
+                    onClick={getSFMCFolders}
+                    className="text-sm text-blue-600 hover:text-blue-500"
                   >
-                    13172 - Content Builder (Root)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFolderIdInput('32504')}
-                    className="text-left px-3 py-2 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
-                  >
-                    32504 - Email
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFolderIdInput('32505')}
-                    className="text-left px-3 py-2 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
-                  >
-                    32505 - Templates
+                    Refresh Folders
                   </button>
                 </div>
               </div>
               
-              <div className="flex justify-end space-x-3">
+              <div className="mt-6 flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowFolderModal(false);
-                    setFolderIdInput('');
-                  }}
+                  onClick={() => setShowFolderModal(false)}
                   className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                  className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-500"
                 >
                   Continue
                 </button>
