@@ -6,7 +6,7 @@ import Link from 'next/link';
 export default function Home() {
   // HubSpot OAuth URL construction with fallback values
   const hubspotClientId = process.env.NEXT_PUBLIC_HUBSPOT_CLIENT_ID || '63e23121-89be-48fa-9e1b-7c68d7e1f83b';
-  const hubspotRedirectUri = process.env.NEXT_PUBLIC_HUBSPOT_REDIRECT_URI || 'https://hubspot-sfmc-migrator.vercel.app/api/callback';
+  const hubspotRedirectUri = process.env.NEXT_PUBLIC_HUBSPOT_REDIRECT_URI || 'https://hub-spot-sfmc-migrator-nu.vercel.app/api/callback';
   
   // For debugging - log variables to console
   console.log('Client ID:', hubspotClientId);
