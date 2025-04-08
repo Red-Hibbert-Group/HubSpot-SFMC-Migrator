@@ -81,6 +81,11 @@ function DashboardContent() {
   // Add a ref for the folder dropdown
   const folderDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Add a state for folder explorer around line 67-70 where other states are defined
+  const [showFolderExplorer, setShowFolderExplorer] = useState(false);
+  const [folderExplorerResults, setFolderExplorerResults] = useState<any>(null);
+  const [loadingFolderExplorer, setLoadingFolderExplorer] = useState(false);
+
   // Check if we have userId
   useEffect(() => {
     if (!userId) {
@@ -551,8 +556,59 @@ function DashboardContent() {
         <p className="mt-2 text-xs">
           View full details in the logs below
         </p>
+
+        {migrationResults.emails && migrationResults.emails.migrated && (
+          <div className="mt-4">
+            <h3 className="text-md font-semibold mb-2">Migrated Emails ({migrationResults.emails.migrated.length}):</h3>
+            <ul className="pl-5 list-disc mb-4">
+              {migrationResults.emails.migrated.map((email: any) => (
+                <li key={email.id} className="mb-1 text-sm">
+                  <span className="font-medium">{email.name}</span>
+                  <span className="text-gray-600 text-xs ml-2">
+                    (SFMC ID: {email.sfmcId}{email.templateId ? `, Template ID: ${email.templateId}` : ''})
+                  </span>
+                </li>
+              ))}
+            </ul>
+            
+            {/* Add the Find My Emails button */}
+            <button
+              onClick={fetchFolderExplorer}
+              className="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-sm hover:bg-blue-100"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Find My Emails in SFMC
+            </button>
+          </div>
+        )}
       </div>
     );
+  };
+
+  // Fetch folder explorer data
+  const fetchFolderExplorer = async () => {
+    if (!sfmcCredentials.clientId || !sfmcCredentials.clientSecret || !sfmcCredentials.subdomain) {
+      alert('SFMC credentials are required');
+      return;
+    }
+    
+    setLoadingFolderExplorer(true);
+    setShowFolderExplorer(true);
+    
+    try {
+      const response = await axios.post('/api/sfmc/test-content-block', {
+        sfmcCredentials
+      });
+      
+      setFolderExplorerResults(response.data);
+    } catch (error) {
+      console.error('Error fetching folder explorer:', error);
+      alert('Failed to fetch folder explorer data');
+    } finally {
+      setLoadingFolderExplorer(false);
+    }
   };
 
   // If no userId, show a message
@@ -1251,6 +1307,132 @@ function DashboardContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Migration Results Help Section */}
+      {migrationResults.emails && migrationResults.emails.migrated && migrationResults.emails.migrated.length > 0 && (
+        <div className="mt-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
+          <h3 className="text-lg font-medium text-blue-800 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            Where to Find Your Migrated Emails
+          </h3>
+          <div className="text-blue-700 text-sm">
+            <p className="mb-2">Your emails have been successfully created in Salesforce Marketing Cloud as template-based emails. Here's how to find them:</p>
+            
+            <div className="ml-1 mb-2">
+              <p className="font-medium">Option 1: Email Studio (Recommended)</p>
+              <ol className="list-decimal ml-5">
+                <li>Go to <strong>Email Studio</strong> in the top navigation</li>
+                <li>Select <strong>Content</strong> from the dropdown</li>
+                <li>Look for emails with the exact names listed above</li>
+                <li>You may need to check different folders</li>
+              </ol>
+            </div>
+            
+            <div className="ml-1 mb-2">
+              <p className="font-medium">Option 2: Search</p>
+              <ol className="list-decimal ml-5">
+                <li>Use the global search in the top right of Marketing Cloud</li>
+                <li>Search for the email name or ID</li>
+                <li>Filter results to show only emails</li>
+              </ol>
+            </div>
+            
+            <div className="ml-1">
+              <p className="font-medium">Option 3: Content Builder</p>
+              <ol className="list-decimal ml-5">
+                <li>Go to <strong>Content Builder</strong></li>
+                <li>Navigate to the folder you selected</li>
+                <li>If you can't find your emails, they may be in a different folder</li>
+                <li>Template-based emails may only appear in Email Studio</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Folder Explorer Modal */}
+      {showFolderExplorer && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4 flex items-center justify-between">
+              <span>SFMC Email Explorer</span>
+              <button
+                onClick={() => setShowFolderExplorer(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </h3>
+            
+            {loadingFolderExplorer ? (
+              <div className="text-center py-10">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                <p className="text-gray-600">Loading folder data...</p>
+              </div>
+            ) : (
+              <div>
+                {folderExplorerResults ? (
+                  <div>
+                    <div className="mb-6">
+                      <h4 className="font-medium text-lg mb-2">Emails by Folder</h4>
+                      <div className="border rounded-md overflow-hidden">
+                        {Object.keys(folderExplorerResults.folderMap).length > 0 ? (
+                          Object.entries(folderExplorerResults.folderMap).map(([folderId, folderData]: [string, any]) => (
+                            <div key={folderId} className="border-b last:border-b-0">
+                              <div className="p-3 bg-gray-50 font-medium flex items-center justify-between">
+                                <span>
+                                  {folderData.folderName} 
+                                  <span className="ml-2 text-xs text-gray-500">Folder ID: {folderId}</span>
+                                </span>
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                  {folderData.emails.length} email{folderData.emails.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <div className="p-0">
+                                {folderData.emails.map((email: any) => (
+                                  <div key={email.id} className="p-3 border-t">
+                                    <div className="text-sm font-medium">{email.name}</div>
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      ID: {email.id} • Created: {new Date(email.createdDate).toLocaleString()}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 text-center text-gray-500">
+                            No emails found. Try refreshing or checking in SFMC directly.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm text-gray-600 mt-4">
+                      <p className="mb-2">
+                        <strong>Looking for your emails?</strong> If you can't find your emails in the list above:
+                      </p>
+                      <ol className="list-decimal ml-5">
+                        <li className="mb-1">Check in Email Studio (not Content Builder) in SFMC</li>
+                        <li className="mb-1">Search for specific email names or IDs using the global search</li>
+                        <li className="mb-1">Check the logs for the exact email ID numbers</li>
+                      </ol>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-gray-500">
+                    No data available. Try refreshing.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

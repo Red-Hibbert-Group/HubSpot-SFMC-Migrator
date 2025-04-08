@@ -2548,9 +2548,18 @@ export const createSFMCTemplateSoapEmail = async (
     let folderIdToUse = folderId;
     if (!folderIdToUse || isNaN(Number(folderIdToUse))) {
       console.warn(`Invalid folder ID: ${folderId}. Using default folder.`);
-      folderIdToUse = 0; // Default folder ID
+      // Instead of 0, use a known visible folder ID
+      folderIdToUse = 14030; // Set this to a known folder ID in your account
+      console.log(`Using known visible folder ID: ${folderIdToUse} instead of the default/root folder (0)`);
     } else {
       folderIdToUse = Number(folderIdToUse);
+      
+      // If folder ID is 0, replace with a known visible folder
+      if (folderIdToUse === 0) {
+        const knownVisibleFolderId = 14030; // Set this to a known folder ID in your account
+        console.log(`Folder ID is 0 (default/root). Using a known visible folder (${knownVisibleFolderId}) instead`);
+        folderIdToUse = knownVisibleFolderId;
+      }
     }
     
     // Check if the folder is an Email Studio folder

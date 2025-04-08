@@ -127,8 +127,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // Enhanced folder selection logic
+    // Modify where contentBuilderFolderId is initialized (around line 130)
     let contentBuilderFolderId = 0;
+    // Default to a known visible Email Studio folder if possible - this helps emails be found in the UI
+    const defaultVisibleFolderId = 14030; // Set this to a known folder ID in your account
     let skipContentBuilderSearch = false;
     let isEmailStudioFolderUsed = false;
 
@@ -136,6 +138,12 @@ export async function POST(request: Request) {
     if (folderId) {
       contentBuilderFolderId = folderId;
       console.log(`Using provided folder ID: ${contentBuilderFolderId}`);
+      
+      // If folder ID is 0, use a visible default instead
+      if (contentBuilderFolderId === 0) {
+        console.log(`Provided folder ID is 0 (default/root). Using a visible folder (${defaultVisibleFolderId}) instead`);
+        contentBuilderFolderId = defaultVisibleFolderId;
+      }
       
       // Check if the provided folder is an Email Studio folder
       try {
