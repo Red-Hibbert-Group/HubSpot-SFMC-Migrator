@@ -7,9 +7,9 @@
   "outputDirectory": ".next",
   "regions": ["sfo1"],
   "env": {
-    "NEXT_PUBLIC_APP_URL": "production-url-to-be-updated",
-    "HUBSPOT_REDIRECT_URI": "production-url-to-be-updated/api/callback",
-    "NEXT_PUBLIC_HUBSPOT_REDIRECT_URI": "production-url-to-be-updated/api/callback",
+    "NEXT_PUBLIC_APP_URL": "https://hubspot-sfmc-migrator.vercel.app",
+    "HUBSPOT_REDIRECT_URI": "https://hubspot-sfmc-migrator.vercel.app/api/callback",
+    "NEXT_PUBLIC_HUBSPOT_REDIRECT_URI": "https://hubspot-sfmc-migrator.vercel.app/api/callback",
     "HUBSPOT_CLIENT_ID": "63e23121-89be-48fa-9e1b-7c68d7e1f83b",
     "NEXT_PUBLIC_HUBSPOT_CLIENT_ID": "63e23121-89be-48fa-9e1b-7c68d7e1f83b",
     "HUBSPOT_CLIENT_SECRET": "19ea5fc2-d316-4abb-8ccd-b32a6b27f16f"
