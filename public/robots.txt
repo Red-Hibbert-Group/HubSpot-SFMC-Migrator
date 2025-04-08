@@ -1,0 +1,6 @@
+# robots.txt for HubSpot to SFMC Migration Tool
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://www.redhibbert.com/sitemap.xml 
